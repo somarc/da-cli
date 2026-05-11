@@ -186,7 +186,7 @@ async function probeSource(client, path) {
 
 async function listAllPaths(client, prefix) {
   const results = [];
-  const queue = [prefix.replace(/\/$/, '')];
+  const queue = [prefix.replace(/\/$/, '') || '/'];
   while (queue.length) {
     const current = queue.shift();
     const data = await client.list(current);
@@ -215,3 +215,6 @@ async function runConcurrent(tasks, concurrency) {
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
   return results;
 }
+
+// ── test exports (not part of the public CLI surface) ─────────────────────────
+export { classify, listAllPaths };

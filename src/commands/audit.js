@@ -89,7 +89,7 @@ export function makeAuditCommand() {
 
 async function listAllHtmlPaths(client, prefix) {
   const results = [];
-  const queue = [prefix.replace(/\/$/, '')];
+  const queue = [prefix.replace(/\/$/, '') || '/'];
   while (queue.length) {
     const current = queue.shift();
     const data = await client.list(current);
@@ -255,6 +255,8 @@ function extractBlockDetails(html) {
     const firstRowContent = extractFirstDirectDivContent(inner);
     const cols = firstRowContent !== null ? countDirectDivChildren(firstRowContent) : 0;
     blocks.push({ name: primary, rows, cols });
+    // Advance past this block's closing tag so nested classed divs aren't extracted separately
+    re.lastIndex = innerStart + inner.length + '</div>'.length;
   }
   return blocks;
 }
@@ -374,3 +376,6 @@ async function fetchBoth(path) {
   info(`Fetched ${base}${pagePath}`);
   return { plain, head };
 }
+
+// ── test exports (not part of the public CLI surface) ─────────────────────────
+export { extractBlockDetails, extractBlockNames, listAllHtmlPaths };
