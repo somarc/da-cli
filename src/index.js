@@ -8,6 +8,8 @@ import { makePublishCommand } from './commands/publish.js';
 import { makeRouteCommand } from './commands/route.js';
 import { makeIndexCommand } from './commands/index.js';
 import { makeAuditCommand } from './commands/audit.js';
+import { makeMigrateCommand } from './commands/migrate.js';
+import { makePipelineCommand } from './commands/pipeline.js';
 
 const program = new Command();
 
@@ -40,5 +42,7 @@ program.addCommand(makePublishCommand());
 program.addCommand(makeRouteCommand());
 program.addCommand(makeIndexCommand());
 program.addCommand(makeAuditCommand());
+program.addCommand(makeMigrateCommand());
+program.addCommand(makePipelineCommand());
 
 program.parseAsync(process.argv);
