@@ -100,14 +100,22 @@ async function resolvePaths(source) {
     // not a local file — fall through to DA prefix listing
   }
 
-  // Treat as a DA path prefix — list and collect all file paths under it
+  // Treat as a DA path prefix — recursively collect all file paths under it
   const client = await createClient();
-  const prefix = source.replace(/\*$/, '').replace(/\/$/, '');
-  const data = await client.list(prefix);
-  const items = Array.isArray(data) ? data : (data?.sources ?? []);
-  return items
-    .filter((s) => s.ext)
-    .map((s) => s.path.replace(`/${client.org}/${client.repo}`, ''));
+  const start = source.replace(/\*$/, '').replace(/\/$/, '') || '/';
+  const results = [];
+  const queue = [start];
+  while (queue.length) {
+    const current = queue.shift();
+    const data = await client.list(current);
+    const items = Array.isArray(data) ? data : (data?.sources ?? []);
+    for (const item of items) {
+      const rel = item.path.replace(`/${client.org}/${client.repo}`, '');
+      if (item.ext) results.push(rel);
+      else queue.push(rel);
+    }
+  }
+  return results;
 }
 
 // Simple manual concurrency pool — no external deps

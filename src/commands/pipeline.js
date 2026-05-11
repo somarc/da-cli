@@ -63,6 +63,8 @@ export function makePipelineCommand() {
           const freshState = JSON.parse(await readFile(runPath, 'utf8'));
           if (freshState._meta?.status === 'aborted') {
             info('Pipeline aborted.');
+            runState._meta.status = 'aborted';
+            runState._meta.completedAt = freshState._meta.abortedAt ?? new Date().toISOString();
             break;
           }
 
@@ -94,8 +96,10 @@ export function makePipelineCommand() {
           }));
         }
 
-        runState._meta.status = 'completed';
-        runState._meta.completedAt = new Date().toISOString();
+        if (runState._meta.status !== 'aborted') {
+          runState._meta.status = 'completed';
+          runState._meta.completedAt = new Date().toISOString();
+        }
       } catch (err) {
         runState._meta.status = 'failed';
         runState._meta.error = err.message;

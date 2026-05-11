@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { createClient } from '../lib/da-client.js';
 import { guardWrite, simpleDiff } from '../lib/mutation.js';
 import { print, info } from '../lib/output.js';
+import { auditHeadings, auditMetadata, auditLinks, auditBlocks } from '../lib/audit-engines.js';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const JOB_DIR = join(homedir(), '.da', 'migrate-jobs');
@@ -393,75 +394,6 @@ export function urlToPath(url) {
   } catch {
     return '/imported.html';
   }
-}
-
-// ── audit engines (duplicated from audit.js to keep migrate self-contained) ───
-// These are intentionally inlined — migrate validate needs them without importing
-// the full audit module (which also registers Commander commands).
-
-function auditHeadings(html) {
-  const headings = extractHeadings(html);
-  const findings = [];
-  const h1s = headings.filter((h) => h.level === 1);
-  if (!h1s.length) findings.push({ severity: 'error', check: 'headings', detail: 'No h1 found' });
-  else if (h1s.length > 1) findings.push({ severity: 'error', check: 'headings', detail: `Multiple h1s (${h1s.length})` });
-  for (let i = 1; i < headings.length; i++) {
-    const prev = headings[i - 1].level, curr = headings[i].level;
-    if (curr > prev + 1) findings.push({ severity: 'warning', check: 'headings', detail: `Heading jump h${prev}→h${curr}: "${headings[i].text.slice(0, 60)}"` });
-  }
-  if (!findings.length) findings.push({ severity: 'pass', check: 'headings', detail: `${headings.length} heading(s), hierarchy ok` });
-  return findings;
-}
-
-function auditMetadata(headHtml) {
-  const findings = [];
-  const title = /property="og:title"\s+content="([^"]+)"/i.exec(headHtml)?.[1] ?? /content="([^"]+)"\s+property="og:title"/i.exec(headHtml)?.[1];
-  const desc = /name="description"\s+content="([^"]+)"/i.exec(headHtml)?.[1] ?? /content="([^"]+)"\s+name="description"/i.exec(headHtml)?.[1];
-  if (!title) findings.push({ severity: 'warning', check: 'metadata', detail: 'Missing og:title' });
-  if (!desc) findings.push({ severity: 'warning', check: 'metadata', detail: 'Missing meta description' });
-  if (!findings.length) findings.push({ severity: 'pass', check: 'metadata', detail: `title: "${title?.slice(0, 50)}"` });
-  return findings;
-}
-
-function auditLinks(html) {
-  const findings = [];
-  const links = [];
-  const re = /<a[^>]+href="([^"]*)"[^>]*>/gi;
-  let m;
-  while ((m = re.exec(html)) !== null) links.push(m[1]);
-  const empty = links.filter((l) => !l || l === '#');
-  if (empty.length) findings.push({ severity: 'warning', check: 'links', detail: `${empty.length} empty/# href(s)` });
-  const other = links.filter((l) => l && !l.startsWith('http') && !l.startsWith('/') && l !== '#');
-  if (other.length) findings.push({ severity: 'warning', check: 'links', detail: `${other.length} relative link(s): ${other.slice(0, 3).join(', ')}` });
-  if (!findings.length) findings.push({ severity: 'pass', check: 'links', detail: `${links.length} link(s) ok` });
-  return findings;
-}
-
-function auditBlocks(html) {
-  const findings = [];
-  const BLOCK_SKIP = new Set(['metadata', 'section-metadata']);
-  const re = /<div\s+class="([\w][\w-]*(?:\s+[\w][\w-]*)*)"\s*>/gi;
-  const blocks = [];
-  let bm;
-  while ((bm = re.exec(html)) !== null) {
-    const primary = bm[1].trim().split(/\s+/)[0];
-    if (BLOCK_SKIP.has(primary)) continue;
-    blocks.push(primary);
-    re.lastIndex = html.indexOf('</div>', bm.index + bm[0].length) + 6;
-  }
-  if (!blocks.length) findings.push({ severity: 'pass', check: 'blocks', detail: 'No blocks (content-only page)' });
-  else findings.push({ severity: 'pass', check: 'blocks', detail: `Blocks found: ${[...new Set(blocks)].join(', ')}` });
-  return findings;
-}
-
-function extractHeadings(html) {
-  const re = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
-  const headings = [];
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    headings.push({ level: parseInt(m[1]), text: m[2].replace(/<[^>]+>/g, '').trim() });
-  }
-  return headings;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

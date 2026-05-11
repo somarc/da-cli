@@ -8,9 +8,12 @@ export function makePublishCommand() {
   // ─── page ──────────────────────────────────────────────────────────────────
   publish
     .command('page <path>')
-    .description('Promote a single page to live CDN')
+    .description('Promote a single page to live CDN — requires --commit')
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
     .action(async (path, opts) => {
+      const { guardWrite } = await import('../lib/mutation.js');
+      if (!guardWrite(`Publish ${path}`).proceed) return;
+
       const client = await createClient(opts.branch ? { branch: opts.branch } : {});
       info(`Publishing: ${path}`);
       try {
@@ -29,10 +32,11 @@ export function makePublishCommand() {
   // ─── pages ─────────────────────────────────────────────────────────────────
   publish
     .command('pages <source>')
-    .description('Batch publish — reads paths from a file or a /prefix/ listing')
+    .description('Batch publish — reads paths from a file or a /prefix/ listing (recursive) — requires --commit')
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch')
     .action(async (source, opts) => {
+      const { guardWrite } = await import('../lib/mutation.js');
       const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
       const paths = await resolvePaths(source);
 
@@ -40,6 +44,8 @@ export function makePublishCommand() {
         console.error('No paths found.');
         process.exit(1);
       }
+
+      if (!guardWrite(`Publish ${paths.length} page(s)`).proceed) return;
 
       info(`Publishing ${paths.length} page(s) with concurrency ${concurrency}…`);
       const client = await createClient(opts.branch ? { branch: opts.branch } : {});
@@ -91,12 +97,20 @@ async function resolvePaths(source) {
     // not a local file — fall through to DA prefix listing
   }
   const client = await createClient();
-  const prefix = source.replace(/\*$/, '').replace(/\/$/, '');
-  const data = await client.list(prefix);
-  const items = Array.isArray(data) ? data : (data?.sources ?? []);
-  return items
-    .filter((s) => s.ext)
-    .map((s) => s.path.replace(`/${client.org}/${client.repo}`, ''));
+  const start = source.replace(/\*$/, '').replace(/\/$/, '') || '/';
+  const results = [];
+  const queue = [start];
+  while (queue.length) {
+    const current = queue.shift();
+    const data = await client.list(current);
+    const items = Array.isArray(data) ? data : (data?.sources ?? []);
+    for (const item of items) {
+      const rel = item.path.replace(`/${client.org}/${client.repo}`, '');
+      if (item.ext) results.push(rel);
+      else queue.push(rel);
+    }
+  }
+  return results;
 }
 
 async function runConcurrent(tasks, concurrency) {
