@@ -51,7 +51,7 @@ export function makeIndexCommand() {
 
       for (const [name, def] of Object.entries(indices)) {
         const target = def.target ?? '/query-index';
-        const url = `${base}${target}.json?limit=1`;
+        const url = `${base}${normalizeTarget(target)}?limit=1`;
         let status = 'ok';
         let missing = [];
         let note = '';
@@ -111,7 +111,7 @@ export function makeIndexCommand() {
       }
 
       const target = def.target ?? '/query-index';
-      const url = `${base}${target}.json?limit=${opts.limit}&offset=${opts.offset}`;
+      const url = `${base}${normalizeTarget(target)}?limit=${opts.limit}&offset=${opts.offset}`;
       info(`GET ${url}`);
 
       const res = await fetch(url, {
@@ -172,4 +172,8 @@ function findQueryYaml(start = process.cwd()) {
 function collect(val, acc) {
   acc.push(val);
   return acc;
+}
+
+function normalizeTarget(target) {
+  return target.endsWith('.json') ? target : `${target}.json`;
 }

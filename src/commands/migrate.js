@@ -103,11 +103,11 @@ export function makeMigrateCommand() {
           }
           done++;
           info(`[${done}/${pending.length}] ${url}`);
-          await writeFile(jobPath, JSON.stringify(jobState, null, 2));
         }),
         concurrency,
       );
 
+      await writeFile(jobPath, JSON.stringify(jobState, null, 2));
       info(`Job ${jobId} complete. State: ${jobPath}`);
       print(Object.entries(jobState).map(([url, s]) => ({ url, ...s })));
     });
@@ -272,35 +272,38 @@ function findTagOpen(lower, open, fromIndex) {
   return -1;
 }
 
-// Extract og/meta tags from <head>.
+// Extract og/meta tags from <head>. Handles both single- and double-quoted attributes.
 function extractPageMetadata(html, sourceUrl) {
-  const get = (re) => re.exec(html)?.[1]?.trim() ?? null;
+  const q = `["']`;
+  const v = `[^"']*`;
+  const g = (pattern) => new RegExp(pattern, 'i').exec(html)?.[1]?.trim() ?? null;
   return {
-    title: get(/property="og:title"\s+content="([^"]+)"/i)
-        ?? get(/content="([^"]+)"\s+property="og:title"/i)
-        ?? get(/<title[^>]*>([^<]+)<\/title>/i),
-    description: get(/name="description"\s+content="([^"]+)"/i)
-              ?? get(/content="([^"]+)"\s+name="description"/i)
-              ?? get(/property="og:description"\s+content="([^"]+)"/i)
-              ?? get(/content="([^"]+)"\s+property="og:description"/i),
-    image: get(/property="og:image"\s+content="([^"]+)"/i)
-        ?? get(/content="([^"]+)"\s+property="og:image"/i),
-    canonical: get(/rel="canonical"\s+href="([^"]+)"/i)
-            ?? get(/href="([^"]+)"\s+rel="canonical"/i)
+    title: g(`property=${q}og:title${q}\\s+content=${q}(${v})${q}`)
+        ?? g(`content=${q}(${v})${q}\\s+property=${q}og:title${q}`)
+        ?? g(/<title[^>]*>([^<]+)<\/title>/i.source),
+    description: g(`name=${q}description${q}\\s+content=${q}(${v})${q}`)
+              ?? g(`content=${q}(${v})${q}\\s+name=${q}description${q}`)
+              ?? g(`property=${q}og:description${q}\\s+content=${q}(${v})${q}`)
+              ?? g(`content=${q}(${v})${q}\\s+property=${q}og:description${q}`),
+    image: g(`property=${q}og:image${q}\\s+content=${q}(${v})${q}`)
+        ?? g(`content=${q}(${v})${q}\\s+property=${q}og:image${q}`),
+    canonical: g(`rel=${q}canonical${q}\\s+href=${q}(${v})${q}`)
+            ?? g(`href=${q}(${v})${q}\\s+rel=${q}canonical${q}`)
             ?? sourceUrl,
   };
 }
 
 // Make relative URLs absolute using the source page's URL as base.
+// Handles both single- and double-quoted attributes; normalizes output to double quotes.
 function absolutizeUrls(html, baseUrl) {
   const base = new URL(baseUrl);
   return html
-    .replace(/(\ssrc=")([^"]+)(")/gi, (_, pre, url, post) => {
-      try { return `${pre}${new URL(url, base).href}${post}`; } catch { return `${pre}${url}${post}`; }
+    .replace(/\ssrc=["']([^"']*)["']/gi, (_, url) => {
+      try { return ` src="${new URL(url, base).href}"`; } catch { return ` src="${url}"`; }
     })
-    .replace(/(\shref=")([^"]+)(")/gi, (_, pre, url, post) => {
-      if (/^(#|mailto:|tel:)/i.test(url)) return `${pre}${url}${post}`;
-      try { return `${pre}${new URL(url, base).href}${post}`; } catch { return `${pre}${url}${post}`; }
+    .replace(/\shref=["']([^"']*)["']/gi, (_, url) => {
+      if (/^(#|mailto:|tel:)/i.test(url)) return ` href="${url}"`;
+      try { return ` href="${new URL(url, base).href}"`; } catch { return ` href="${url}"`; }
     });
 }
 
@@ -320,17 +323,21 @@ function cleanHtml(html) {
     .replace(/<([a-z][a-z0-9]*)\s([^>]+)>/gi, (_, tag, attrs) => {
       const t = tag.toLowerCase();
       if (t === 'a') {
-        const href = /href="([^"]*)"/.exec(attrs)?.[0] ?? '';
+        const hrefVal = /href=["']([^"']*)["']/.exec(attrs)?.[1] ?? null;
+        const href = hrefVal !== null ? `href="${hrefVal}"` : '';
         return href ? `<${tag} ${href}>` : `<${tag}>`;
       }
       if (t === 'img') {
-        const src = /src="([^"]*)"/.exec(attrs)?.[0] ?? '';
-        const alt = /alt="([^"]*)"/.exec(attrs)?.[0] ?? '';
+        const srcVal = /src=["']([^"']*)["']/.exec(attrs)?.[1] ?? null;
+        const altVal = /alt=["']([^"']*)["']/.exec(attrs)?.[1] ?? null;
+        const src = srcVal !== null ? `src="${srcVal}"` : '';
+        const alt = altVal !== null ? `alt="${altVal}"` : '';
         const parts = [src, alt].filter(Boolean).join(' ');
         return parts ? `<${tag} ${parts}>` : `<${tag}>`;
       }
       if (t === 'iframe') {
-        const src = /src="([^"]*)"/.exec(attrs)?.[0] ?? '';
+        const srcVal = /src=["']([^"']*)["']/.exec(attrs)?.[1] ?? null;
+        const src = srcVal !== null ? `src="${srcVal}"` : '';
         return src ? `<${tag} ${src}>` : `<${tag}>`;
       }
       return `<${tag}>`;

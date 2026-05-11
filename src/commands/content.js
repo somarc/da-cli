@@ -74,12 +74,9 @@ export function makeContentCommand() {
         process.exit(1);
       }
 
-      const { proceed } = guardWrite(`Upload ${file} → ${path}`);
-      if (!proceed) return;
-
       const client = await createClient();
 
-      // Fetch existing content for diff preview before writing
+      // Fetch existing content to show diff before the guard gate
       let oldContent = null;
       try {
         const res = await client.sourceGet(path);
@@ -91,6 +88,9 @@ export function makeContentCommand() {
       const diffText = simpleDiff(oldContent ?? '', newContent);
       info(oldContent === null ? `New document: ${path}` : `Diff for ${path}:`);
       if (oldContent !== null) info(diffText);
+
+      const { proceed } = guardWrite(`Upload ${file} → ${path}`);
+      if (!proceed) return;
 
       try {
         await client.sourcePut(path, newContent);
