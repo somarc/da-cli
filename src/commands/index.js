@@ -174,6 +174,6 @@ function collect(val, acc) {
   return acc;
 }
 
-function normalizeTarget(target) {
+export function normalizeTarget(target) {
   return target.endsWith('.json') ? target : `${target}.json`;
 }

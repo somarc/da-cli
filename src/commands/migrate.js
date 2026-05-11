@@ -428,4 +428,4 @@ async function runConcurrent(tasks, concurrency) {
 }
 
 // ── test exports ──────────────────────────────────────────────────────────────
-export { scrapeAndConvert, extractPageMetadata, absolutizeUrls, cleanHtml, convertBlocks, buildEdsDocument, extractTagContent };
+export { scrapeAndConvert, extractPageMetadata, absolutizeUrls, cleanHtml, convertBlocks, buildEdsDocument, extractTagContent, runConcurrent };

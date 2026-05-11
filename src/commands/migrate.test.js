@@ -8,6 +8,7 @@ import {
   convertBlocks,
   buildEdsDocument,
   extractTagContent,
+  runConcurrent,
 } from './migrate.js';
 
 // ── urlToPath ─────────────────────────────────────────────────────────────────
@@ -80,6 +81,19 @@ describe('extractPageMetadata', () => {
     const meta = extractPageMetadata(html, 'https://old.com/page');
     assert.equal(meta.title, 'Reversed Title');
   });
+
+  test('handles single-quoted attributes', () => {
+    const html = `<meta property='og:title' content='Single Quote Title'><meta name='description' content='Single quote desc'>`;
+    const meta = extractPageMetadata(html, 'https://old.com/page');
+    assert.equal(meta.title, 'Single Quote Title');
+    assert.equal(meta.description, 'Single quote desc');
+  });
+
+  test('handles single-quoted canonical', () => {
+    const html = `<link rel='canonical' href='https://old.com/canonical'>`;
+    const meta = extractPageMetadata(html, 'https://old.com/page');
+    assert.equal(meta.canonical, 'https://old.com/canonical');
+  });
 });
 
 // ── absolutizeUrls ────────────────────────────────────────────────────────────
@@ -113,6 +127,18 @@ describe('absolutizeUrls', () => {
     const html = '<a href="#section">Jump</a>';
     const result = absolutizeUrls(html, 'https://old.com/page');
     assert.ok(result.includes('href="#section"'));
+  });
+
+  test('handles single-quoted src and normalizes to double quotes', () => {
+    const html = "<img src='/images/hero.jpg'>";
+    const result = absolutizeUrls(html, 'https://old.com/page');
+    assert.ok(result.includes('src="https://old.com/images/hero.jpg"'));
+  });
+
+  test('handles single-quoted href and normalizes to double quotes', () => {
+    const html = "<a href='/about'>About</a>";
+    const result = absolutizeUrls(html, 'https://old.com/page');
+    assert.ok(result.includes('href="https://old.com/about"'));
   });
 });
 
@@ -264,5 +290,64 @@ describe('extractTagContent', () => {
     const html = '<main class="content"><p>Inside</p></main>';
     const result = extractTagContent(html, 'main');
     assert.ok(result.includes('<p>Inside</p>'));
+  });
+});
+
+// ── migrate batch — job state persistence ─────────────────────────────────────
+// Verifies the guarantee that makes a single post-run write safe: all worker
+// mutations to the shared state object are present when runConcurrent resolves.
+
+describe('migrate batch — job state persistence', () => {
+  test('all worker state mutations are present after runConcurrent resolves', async () => {
+    const state = {};
+    const urls = ['url-a', 'url-b', 'url-c'];
+    await runConcurrent(
+      urls.map((url) => async () => {
+        state[url] = { status: 'done', path: `/${url}.html` };
+      }),
+      3,
+    );
+    assert.equal(Object.keys(state).length, 3);
+    for (const url of urls) {
+      assert.deepEqual(state[url], { status: 'done', path: `/${url}.html` });
+    }
+  });
+
+  test('state is complete when concurrency < task count (serialization stress)', async () => {
+    const state = {};
+    const urls = Array.from({ length: 10 }, (_, i) => `url-${i}`);
+    await runConcurrent(
+      urls.map((url) => async () => {
+        await new Promise((resolve) => setImmediate(resolve));
+        state[url] = { status: 'done' };
+      }),
+      3,
+    );
+    assert.equal(Object.keys(state).length, 10);
+    for (const url of urls) {
+      assert.equal(state[url].status, 'done');
+    }
+  });
+
+  test('error entries are preserved in state', async () => {
+    const state = {};
+    await runConcurrent(
+      [
+        async () => { state['url-ok'] = { status: 'done' }; },
+        async () => { state['url-err'] = { status: 'error', error: 'HTTP 500' }; },
+      ],
+      2,
+    );
+    assert.equal(state['url-ok'].status, 'done');
+    assert.equal(state['url-err'].status, 'error');
+    assert.equal(state['url-err'].error, 'HTTP 500');
+  });
+
+  test('runConcurrent returns results in task order', async () => {
+    const results = await runConcurrent(
+      [async () => 'a', async () => 'b', async () => 'c'],
+      2,
+    );
+    assert.deepEqual(results, ['a', 'b', 'c']);
   });
 });
