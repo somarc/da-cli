@@ -37,12 +37,15 @@ export class DaClient {
     return res;
   }
 
-  // /source endpoints
-  async sourceGet(path) {
-    return this._fetch(`/source/${this.org}/${this._repoRequired()}${normalizePath(path)}`);
+  // /list endpoint — directory listing
+  async list(path = '') {
+    const suffix = path ? `/${path.replace(/^\//, '')}` : '';
+    const res = await this._fetch(`/list/${this.org}/${this._repoRequired()}${suffix}`);
+    return res.json();
   }
 
-  async sourceList(path = '/') {
+  // /source endpoints
+  async sourceGet(path) {
     return this._fetch(`/source/${this.org}/${this._repoRequired()}${normalizePath(path)}`);
   }
 
@@ -58,6 +61,29 @@ export class DaClient {
   async sourceDelete(path) {
     return this._fetch(`/source/${this.org}/${this._repoRequired()}${normalizePath(path)}`, {
       method: 'DELETE',
+    });
+  }
+
+  // /versionlist endpoint
+  async versionList(path) {
+    const res = await this._fetch(`/versionlist/${this.org}/${this._repoRequired()}${normalizePath(path)}`);
+    return res.json();
+  }
+
+  // /copy and /move — body is JSON {sourcePath, destinationPath}
+  async copy(sourcePath, destinationPath) {
+    return this._fetch(`/copy/${this.org}/${this._repoRequired()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath, destinationPath }),
+    });
+  }
+
+  async move(sourcePath, destinationPath) {
+    return this._fetch(`/move/${this.org}/${this._repoRequired()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath, destinationPath }),
     });
   }
 

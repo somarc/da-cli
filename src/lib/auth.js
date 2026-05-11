@@ -43,7 +43,6 @@ export async function getToken({ refresh = false } = {}) {
   const result = spawnSync('npx', ['github:adobe-rnd/da-auth-helper', 'token'], {
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'pipe'],
-    shell: true,
   });
 
   if (result.status !== 0) {
