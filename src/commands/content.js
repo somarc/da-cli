@@ -18,18 +18,19 @@ export function makeContentCommand() {
       const client = await createClient();
       try {
         const data = await client.list(path);
-        const sources = data?.sources ?? [];
+        // /list returns a flat array: [{path, name, ext?, lastModified}]
+        // directories have no ext field
+        const sources = Array.isArray(data) ? data : (data?.sources ?? []);
         if (sources.length === 0) {
           info('(empty)');
           return;
         }
         const rows = sources.map((s) => ({
-          name: s.type === 'directory' ? `${s.name}/` : s.name,
-          type: s.type,
+          name: s.ext ? `${s.name}.${s.ext}` : `${s.name}/`,
+          type: s.ext ? 'file' : 'dir',
           lastModified: s.lastModified
             ? new Date(s.lastModified).toISOString().replace('T', ' ').slice(0, 19)
             : '',
-          size: s.size != null ? String(s.size) : '',
         }));
         print(rows);
       } catch (err) {
