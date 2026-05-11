@@ -1,0 +1,26 @@
+{
+  "name": "@somarc/da-cli",
+  "version": "0.1.0",
+  "description": "CLI for Adobe Edge Delivery Services via DA Admin API",
+  "type": "module",
+  "bin": {
+    "da": "./bin/da.js"
+  },
+  "exports": "./src/index.js",
+  "scripts": {
+    "test": "node --test src/**/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/somarc/da-cli.git"
+  },
+  "keywords": ["aem", "eds", "da", "edge-delivery-services", "cli"],
+  "author": "somarc",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  }
+}
