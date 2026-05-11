@@ -6,6 +6,7 @@ import { makeContentCommand } from './commands/content.js';
 import { makePreviewCommand } from './commands/preview.js';
 import { makePublishCommand } from './commands/publish.js';
 import { makeRouteCommand } from './commands/route.js';
+import { makeIndexCommand } from './commands/index.js';
 
 const program = new Command();
 
@@ -36,5 +37,6 @@ program.addCommand(makeContentCommand());
 program.addCommand(makePreviewCommand());
 program.addCommand(makePublishCommand());
 program.addCommand(makeRouteCommand());
+program.addCommand(makeIndexCommand());
 
 program.parseAsync(process.argv);

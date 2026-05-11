@@ -14,13 +14,20 @@
     "type": "git",
     "url": "git+https://github.com/somarc/da-cli.git"
   },
-  "keywords": ["aem", "eds", "da", "edge-delivery-services", "cli"],
+  "keywords": [
+    "aem",
+    "eds",
+    "da",
+    "edge-delivery-services",
+    "cli"
+  ],
   "author": "somarc",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.1"
   }
 }
