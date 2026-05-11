@@ -57,14 +57,9 @@ export function makeAuditCommand() {
       const branch = config.branch ?? 'main';
       const base = `https://${branch}--${repo}--${org}.aem.page`;
 
-      // List source files
       const { createClient } = await import('../lib/da-client.js');
       const client = await createClient();
-      const data = await client.list(opts.prefix.replace(/\/$/, ''));
-      const items = Array.isArray(data) ? data : (data?.sources ?? []);
-      const paths = items.filter((s) => s.ext === 'html').map((s) =>
-        s.path.replace(`/${client.org}/${client.repo}`, ''),
-      );
+      const paths = await listAllHtmlPaths(client, opts.prefix);
 
       info(`Scanning ${paths.length} pages for block contracts…`);
       const blockMap = {};
@@ -88,6 +83,24 @@ export function makeAuditCommand() {
     });
 
   return audit;
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+async function listAllHtmlPaths(client, prefix) {
+  const results = [];
+  const queue = [prefix.replace(/\/$/, '')];
+  while (queue.length) {
+    const current = queue.shift();
+    const data = await client.list(current);
+    const items = Array.isArray(data) ? data : (data?.sources ?? []);
+    for (const item of items) {
+      const rel = item.path.replace(`/${client.org}/${client.repo}`, '');
+      if (item.ext === 'html') results.push(rel);
+      else if (!item.ext) queue.push(rel);
+    }
+  }
+  return results;
 }
 
 // ── audit engines ────────────────────────────────────────────────────────────
@@ -213,33 +226,119 @@ function extractLinks(html) {
   return links;
 }
 
+// EDS blocks in .plain.html: <div class="block-name [variants]"> with <div> rows inside.
+// System wrappers that are not authoring blocks:
+const BLOCK_SKIP = new Set(['metadata', 'section-metadata']);
+
 function extractBlockNames(html) {
-  const re = /<div class="([\w-]+(?:\s+[\w-]+)*)">/gi;
+  const re = /<div\s+class="([\w][\w-]*(?:\s+[\w][\w-]*)*)"\s*>/gi;
   const names = new Set();
-  const skip = new Set(['metadata', 'section-metadata']);
   let m;
   while ((m = re.exec(html)) !== null) {
     const primary = m[1].trim().split(/\s+/)[0];
-    if (!skip.has(primary)) names.add(primary);
+    if (!BLOCK_SKIP.has(primary)) names.add(primary);
   }
   return names;
 }
 
 function extractBlockDetails(html) {
-  const re = /<div class="([\w-]+(?:\s+[\w-]+)*)">([\s\S]*?)<\/div>\s*(?=<div|$)/gi;
-  const skip = new Set(['metadata', 'section-metadata', 'columns', 'cards', 'hero']);
+  const re = /<div\s+class="([\w][\w-]*(?:\s+[\w][\w-]*)*)"\s*>/gi;
   const blocks = [];
   let m;
   while ((m = re.exec(html)) !== null) {
-    const name = m[1].trim().split(/\s+/)[0];
-    if (skip.has(name)) continue;
-    const inner = m[2];
-    const rows = (inner.match(/<div>/g) ?? []).length;
-    const firstRow = /<div>([\s\S]*?)<\/div>/.exec(inner);
-    const cols = firstRow ? (firstRow[1].match(/<div>/g) ?? []).length : 0;
-    blocks.push({ name, rows, cols });
+    const primary = m[1].trim().split(/\s+/)[0];
+    if (BLOCK_SKIP.has(primary)) continue;
+    const innerStart = m.index + m[0].length;
+    const inner = extractDivContent(html, innerStart);
+    if (inner === null) continue;
+    const rows = countDirectDivChildren(inner);
+    const firstRowContent = extractFirstDirectDivContent(inner);
+    const cols = firstRowContent !== null ? countDirectDivChildren(firstRowContent) : 0;
+    blocks.push({ name: primary, rows, cols });
   }
   return blocks;
+}
+
+// Walk from fromIndex (just after an opening <div>) to find its matching </div>.
+// Returns the inner content (excluding the outer tags), or null if malformed.
+function extractDivContent(html, fromIndex) {
+  let depth = 1;
+  let i = fromIndex;
+  while (i < html.length && depth > 0) {
+    const nextOpen = findNextDiv(html, i);
+    const nextClose = html.indexOf('</div>', i);
+    if (nextClose === -1) return null;
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++;
+      i = nextOpen + 4;
+    } else {
+      depth--;
+      if (depth === 0) return html.slice(fromIndex, nextClose);
+      i = nextClose + 6;
+    }
+  }
+  return null;
+}
+
+// Count the number of direct-child <div> elements within html (depth 0 only).
+function countDirectDivChildren(html) {
+  if (!html) return 0;
+  let count = 0;
+  let depth = 0;
+  let i = 0;
+  while (i < html.length) {
+    const nextOpen = findNextDiv(html, i);
+    const nextClose = html.indexOf('</div>', i);
+    if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
+      if (depth === 0) count++;
+      depth++;
+      i = nextOpen + 4;
+    } else if (nextClose !== -1) {
+      depth--;
+      i = nextClose + 6;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
+// Return the inner content of the first direct-child <div>, or null if none.
+function extractFirstDirectDivContent(html) {
+  if (!html) return null;
+  let depth = 0;
+  let i = 0;
+  let firstInnerStart = -1;
+  while (i < html.length) {
+    const nextOpen = findNextDiv(html, i);
+    const nextClose = html.indexOf('</div>', i);
+    if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
+      if (depth === 0) firstInnerStart = html.indexOf('>', nextOpen) + 1;
+      depth++;
+      i = nextOpen + 4;
+    } else if (nextClose !== -1) {
+      depth--;
+      if (depth === 0 && firstInnerStart !== -1) return html.slice(firstInnerStart, nextClose);
+      i = nextClose + 6;
+    } else {
+      break;
+    }
+  }
+  return null;
+}
+
+// Find the next <div> or <div ...> opening tag at or after fromIndex.
+// Avoids matching <divider> or other elements that start with "div".
+function findNextDiv(html, fromIndex) {
+  let i = fromIndex;
+  while (i < html.length) {
+    const pos = html.indexOf('<div', i);
+    if (pos === -1) return -1;
+    const ch = html[pos + 4];
+    if (ch === '>' || ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') return pos;
+    i = pos + 4;
+  }
+  return -1;
 }
 
 // ── output ────────────────────────────────────────────────────────────────────

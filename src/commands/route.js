@@ -9,15 +9,23 @@ export function makeRouteCommand() {
   const route = new Command('route').description('Classify and manage DA route ownership');
 
   // ─── classify ──────────────────────────────────────────────────────────────
+  // Exit-code contract (for shell scripting):
+  //   0 = contentbus   (DA-owned, safe to do DA operations)
+  //   2 = orphan       (no owner found)
+  //   3 = codebus      (code-repo owned)
+  //   4 = hybrid       (both DA source and code-repo content present)
+  //   5 = probe-failed (API error — classification is incomplete, do not act)
+  //   1 = uncaught runtime error (Node default)
   route
     .command('classify <path>')
-    .description('Probe route ownership: contentbus | codebus | hybrid | orphan')
+    .description('Probe route ownership: contentbus | codebus | hybrid | orphan | probe-failed')
     .action(async (path) => {
       const client = await createClient();
       const verdict = await classify(client, path);
       print(verdict);
-      // Non-zero exit for codebus/hybrid so shell scripts can branch on it
-      if (verdict.ownership === 'orphan') process.exit(2);
+      const exitCodes = { contentbus: 0, orphan: 2, codebus: 3, hybrid: 4, 'probe-failed': 5 };
+      const code = exitCodes[verdict.ownership] ?? 1;
+      if (code !== 0) process.exit(code);
     });
 
   // ─── audit ─────────────────────────────────────────────────────────────────
@@ -59,6 +67,12 @@ export function makeRouteCommand() {
       info(`Classifying ${path}…`);
       const verdict = await classify(client, path);
       info(`Ownership: ${verdict.ownership}`);
+
+      if (verdict.ownership === 'probe-failed') {
+        console.error(`Classification incomplete for ${path} — API probe failed: ${verdict.probeErrors?.join('; ')}`);
+        console.error('Refusing to delete: re-run when the API is reachable.');
+        process.exit(5);
+      }
 
       if (!opts.force && verdict.ownership === 'codebus') {
         console.error(`Route ${path} is codebus-owned — deleting DA source would not remove the page.`);
@@ -103,14 +117,28 @@ export function makeRouteCommand() {
 // ── classification engine ────────────────────────────────────────────────────
 
 async function classify(client, path) {
-  // Probe DA source (try .html path first, then bare path) and Helix status in parallel
   const [sourceResult, statusResult] = await Promise.allSettled([
     probeSource(client, path),
     client.helixPreviewStatus(path),
   ]);
 
-  const { hasSource, sourcePath } = sourceResult.value ?? { hasSource: false, sourcePath: path };
-  const helixStatus = statusResult.value ?? {};
+  const probeErrors = [];
+
+  // Source probe: a non-404 rejection is a real failure, not "no source"
+  if (sourceResult.status === 'rejected') {
+    probeErrors.push(`source: ${sourceResult.reason?.message ?? sourceResult.reason}`);
+  }
+  // Helix status probe: any rejection is a real failure
+  if (statusResult.status === 'rejected') {
+    probeErrors.push(`helix-status: ${statusResult.reason?.message ?? statusResult.reason}`);
+  }
+
+  if (probeErrors.length > 0) {
+    return { path, ownership: 'probe-failed', probeErrors, daSource: null, sourcePath: path };
+  }
+
+  const { hasSource, sourcePath } = sourceResult.value;
+  const helixStatus = statusResult.value;
 
   const sourceLocation =
     helixStatus.preview?.sourceLocation ??
@@ -119,7 +147,6 @@ async function classify(client, path) {
   const liveStatus = helixStatus.live?.status ?? 0;
 
   const isDAContent = sourceLocation.includes('content.da.live');
-  // Code-backed: served from GitHub (sourceLocation is a raw GitHub URL or similar non-DA URL)
   const isCodeContent = sourceLocation.startsWith('https://') && !isDAContent;
 
   let ownership;
@@ -158,11 +185,22 @@ async function probeSource(client, path) {
 }
 
 async function listAllPaths(client, prefix) {
-  const data = await client.list(prefix.replace(/\/$/, ''));
-  const items = Array.isArray(data) ? data : (data?.sources ?? []);
-  return items
-    .filter((s) => s.ext)
-    .map((s) => s.path.replace(`/${client.org}/${client.repo}`, ''));
+  const results = [];
+  const queue = [prefix.replace(/\/$/, '')];
+  while (queue.length) {
+    const current = queue.shift();
+    const data = await client.list(current);
+    const items = Array.isArray(data) ? data : (data?.sources ?? []);
+    for (const item of items) {
+      if (item.ext) {
+        results.push(item.path.replace(`/${client.org}/${client.repo}`, ''));
+      } else {
+        // Directory — recurse
+        queue.push(item.path.replace(`/${client.org}/${client.repo}`, ''));
+      }
+    }
+  }
+  return results;
 }
 
 async function runConcurrent(tasks, concurrency) {
