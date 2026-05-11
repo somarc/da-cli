@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createInterface } from 'node:readline/promises';
+import { getGlobals } from './context.js';
 
 const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.da', 'config.json');
 const PROJECT_CONFIG_FILE = '.da.json';
@@ -22,7 +23,7 @@ async function writeJson(p, data) {
   await writeFile(p, JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
 
-function findProjectConfig(start = process.cwd()) {
+export function findProjectConfig(start = process.cwd()) {
   let dir = start;
   while (true) {
     const candidate = path.join(dir, PROJECT_CONFIG_FILE);
@@ -33,39 +34,64 @@ function findProjectConfig(start = process.cwd()) {
   }
 }
 
+// Resolves config in precedence order:
+//   command-local overrides > root CLI flags > project .da.json > ~/.da/config.json
 export async function resolveConfig(overrides = {}) {
-  const global = await readJson(GLOBAL_CONFIG_PATH);
+  const globals = getGlobals();
+  const globalCfg = await readJson(GLOBAL_CONFIG_PATH);
   const projectPath = findProjectConfig();
-  const project = projectPath ? await readJson(projectPath) : {};
+  const projectCfg = projectPath ? await readJson(projectPath) : {};
 
-  const resolved = { ...global, ...project };
+  const base = { ...globalCfg, ...projectCfg };
+
+  // Root-level CLI flags take precedence over config files
+  if (globals.org) base.org = globals.org;
+  if (globals.repo) base.repo = globals.repo;
+  if (globals.env) base.env = globals.env;
+
+  // Command-local overrides are highest precedence
   for (const [k, v] of Object.entries(overrides)) {
-    if (v !== undefined && v !== null) resolved[k] = v;
+    if (v !== undefined && v !== null) base[k] = v;
   }
 
+  const sources = {
+    org: overrides.org != null ? 'override'
+      : globals.org != null ? 'flag'
+      : projectCfg.org != null ? 'project'
+      : globalCfg.org != null ? 'global'
+      : 'unset',
+    repo: overrides.repo != null ? 'override'
+      : globals.repo != null ? 'flag'
+      : projectCfg.repo != null ? 'project'
+      : globalCfg.repo != null ? 'global'
+      : 'unset',
+    env: overrides.env != null ? 'override'
+      : globals.env != null ? 'flag'
+      : projectCfg.env != null ? 'project'
+      : globalCfg.env != null ? 'global'
+      : 'default',
+  };
+
   return {
-    org: resolved.org,
-    repo: resolved.repo,
-    env: resolved.env ?? 'prod',
-    config: resolved,
-    sources: {
-      org: overrides.org != null ? 'flag' : project.org != null ? 'project' : global.org != null ? 'global' : 'unset',
-      repo: overrides.repo != null ? 'flag' : project.repo != null ? 'project' : global.repo != null ? 'global' : 'unset',
-      env: overrides.env != null ? 'flag' : project.env != null ? 'project' : global.env != null ? 'global' : 'default',
-    },
+    org: base.org,
+    repo: base.repo,
+    env: base.env ?? 'prod',
+    config: base,
+    sources,
+    projectConfigPath: projectPath,
+    globalConfigPath: GLOBAL_CONFIG_PATH,
   };
 }
 
-export async function getConfigValue(key, scope = 'resolved') {
+export async function getConfigValue(key) {
   const { config } = await resolveConfig();
   return config[key];
 }
 
 export async function setConfigValue(key, value, { global: useGlobal = false } = {}) {
-  const targetPath = useGlobal ? GLOBAL_CONFIG_PATH : (() => {
-    const existing = findProjectConfig();
-    return existing ?? path.join(process.cwd(), PROJECT_CONFIG_FILE);
-  })();
+  const targetPath = useGlobal
+    ? GLOBAL_CONFIG_PATH
+    : (findProjectConfig() ?? path.join(process.cwd(), PROJECT_CONFIG_FILE));
   const data = await readJson(targetPath);
   data[key] = value;
   await writeJson(targetPath, data);
@@ -99,8 +125,4 @@ export async function initConfig({ global: useGlobal = false } = {}) {
 
 export function globalConfigPath() {
   return GLOBAL_CONFIG_PATH;
-}
-
-export function projectConfigFile() {
-  return PROJECT_CONFIG_FILE;
 }

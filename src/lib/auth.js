@@ -1,6 +1,6 @@
-import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -8,6 +8,19 @@ const TOKEN_PATH = path.join(os.homedir(), '.aem', 'da-token.json');
 
 export function tokenPath() {
   return TOKEN_PATH;
+}
+
+function jwtExp(token) {
+  // Adobe IMS tokens are JWTs; decode payload without signature verification
+  // to read the real `exp` claim. Fall back to null if not parseable.
+  try {
+    const [, payload] = token.split('.');
+    if (!payload) return null;
+    const { exp } = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return typeof exp === 'number' ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 async function readCache() {
@@ -27,7 +40,6 @@ export async function getToken({ refresh = false } = {}) {
     }
   }
 
-  // Obtain fresh token via da-auth-helper
   const result = spawnSync('npx', ['github:adobe-rnd/da-auth-helper', 'token'], {
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'pipe'],
@@ -41,11 +53,13 @@ export async function getToken({ refresh = false } = {}) {
   const token = result.stdout.trim();
   if (!token) throw new Error('da-auth-helper returned empty token');
 
-  // Write cache via Python — node subshell env-var inheritance is unreliable
-  const expires_at = Date.now() + 3_600_000;
+  // Derive expiry from the JWT exp claim; fall back to 1-hour synthetic value
+  const expires_at = jwtExp(token) ?? (Date.now() + 3_600_000);
+
   const cacheDir = path.dirname(TOKEN_PATH);
   if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
 
+  // Write via Python — node env-var subshell inheritance silently drops access_token
   const py = `import json; open(r'${TOKEN_PATH}', 'w').write(json.dumps({'access_token': r'${token}', 'expires_at': ${expires_at}}))`;
   const pyResult = spawnSync('python3', ['-c', py], { encoding: 'utf8' });
   if (pyResult.status !== 0) {
@@ -56,7 +70,6 @@ export async function getToken({ refresh = false } = {}) {
 }
 
 export async function clearToken() {
-  const { unlink } = await import('node:fs/promises');
   try {
     await unlink(TOKEN_PATH);
     return true;

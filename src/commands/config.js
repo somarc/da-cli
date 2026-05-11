@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { resolveConfig, getConfigValue, setConfigValue, initConfig, globalConfigPath, projectConfigFile } from '../lib/config.js';
+import { resolveConfig, getConfigValue, setConfigValue, initConfig, globalConfigPath } from '../lib/config.js';
 
 export function makeConfigCommand() {
   const config = new Command('config').description('Manage DA CLI configuration');
@@ -14,7 +14,6 @@ export function makeConfigCommand() {
         console.log(`Config written to ${written}`);
       } catch (err) {
         if (err.code === 'ERR_USE_AFTER_CLOSE') {
-          // stdin closed (non-interactive) — just show help
           console.error('stdin is not interactive. Use `da config set` to write values directly.');
         } else {
           console.error(err.message);
@@ -47,12 +46,10 @@ export function makeConfigCommand() {
   config
     .command('show')
     .description('Print full resolved config with source annotation (flag / project / global / default)')
-    .option('--org <org>', 'Override org for this resolution')
-    .option('--repo <repo>', 'Override repo for this resolution')
-    .option('--env <env>', 'Override env for this resolution')
     .option('--json', 'Output as JSON')
     .action(async (opts) => {
-      const resolved = await resolveConfig({ org: opts.org, repo: opts.repo, env: opts.env });
+      // Global --org/--repo/--env flags are already in context via preAction hook
+      const resolved = await resolveConfig();
 
       if (opts.json) {
         console.log(JSON.stringify(resolved, null, 2));
@@ -77,7 +74,8 @@ export function makeConfigCommand() {
       }
 
       console.log('');
-      console.log(`Project config: ${projectConfigFile()} (searched upward from cwd)`);
+      const projectPath = resolved.projectConfigPath ?? '(none found)';
+      console.log(`Project config: ${projectPath}`);
       console.log(`Global config:  ${globalConfigPath()}`);
     });
 

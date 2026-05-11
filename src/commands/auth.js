@@ -10,9 +10,8 @@ export function makeAuthCommand() {
     .option('--refresh', 'Force re-auth even if cached token is still valid')
     .action(async (opts) => {
       try {
-        const token = await getToken({ refresh: opts.refresh });
+        await getToken({ refresh: opts.refresh });
         console.log(`Authenticated. Token cached at ${tokenPath()}`);
-        console.log(`Bearer ${token.slice(0, 20)}…`);
       } catch (err) {
         console.error(`Auth failed: ${err.message}`);
         process.exit(1);
