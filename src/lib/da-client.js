@@ -266,8 +266,9 @@ function helixPath(p) {
 
 // Pure URL builder — exported so tests can assert against production logic.
 export function buildPlainHtmlUrl({ org, repo, branch = 'main' }, path) {
-  const plain = path.replace(/\.html$/, '') + '.plain.html';
-  return `https://${branch}--${repo}--${org}.aem.page${norm(plain)}`;
+  const stripped = path.replace(/\.html$/, '');
+  const segment = stripped === '/' ? '/index' : stripped;
+  return `https://${branch}--${repo}--${org}.aem.page${norm(segment)}.plain.html`;
 }
 
 // Static unauthenticated helper — used by `da design` and `da stardust` when no
