@@ -3,12 +3,12 @@ import { createClient, DaApiError, buildPlainHtmlUrl } from '../lib/da-client.js
 import { print, info, verbose } from '../lib/output.js';
 
 export function makePreviewCommand() {
-  const preview = new Command('preview').description('Trigger EDS preview pipeline via Helix admin');
+  const preview = new Command('preview').description('Trigger EDS preview pipeline — updates *.aem.page only; run `da publish` to promote to *.aem.live');
 
   // ─── page ──────────────────────────────────────────────────────────────────
   preview
     .command('page <path>')
-    .description('Preview a single page — flushes DA cache then triggers Helix pipeline')
+    .description('Preview a single page — flushes DA cache then triggers Helix pipeline (*.aem.page only; use publish to go live)')
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
     .action(async (path, opts) => {
       const client = await createClient(opts.branch ? { branch: opts.branch } : {});
@@ -40,7 +40,7 @@ export function makePreviewCommand() {
   // ─── pages ─────────────────────────────────────────────────────────────────
   preview
     .command('pages <source>')
-    .description('Batch preview — reads paths from a file (one per line) or a /prefix/ for all pages under it')
+    .description('Batch preview — reads paths from a file (one per line) or a /prefix/ for all pages (*.aem.page only; use publish to go live)')
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
     .action(async (source, opts) => {

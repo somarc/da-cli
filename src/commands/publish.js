@@ -3,7 +3,7 @@ import { createClient, DaApiError } from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
 
 export function makePublishCommand() {
-  const publish = new Command('publish').description('Promote pages to live CDN via Helix admin');
+  const publish = new Command('publish').description('Promote previewed pages to live CDN (*.aem.live) — step 2 after `da preview`; requires --commit');
 
   // ─── page ──────────────────────────────────────────────────────────────────
   publish
