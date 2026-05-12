@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { createClient } from '../lib/da-client.js';
+import { createClient, DaApiError } from '../lib/da-client.js';
 import { guardWrite, simpleDiff } from '../lib/mutation.js';
 import { print, info } from '../lib/output.js';
 import { auditHeadings, auditMetadata, auditLinks, auditBlocks } from '../lib/audit-engines.js';
@@ -30,13 +30,15 @@ export function makeMigrateCommand() {
       info(`Title: ${metadata.title ?? '(none)'}`);
 
       let existing = '';
-      const existingRes = await client.sourceGet(daPath);
-      if (existingRes.status === 404) {
-        // new file — existing stays empty
-      } else if (!existingRes.ok) {
-        throw new Error(`Failed to fetch existing content at ${daPath}: HTTP ${existingRes.status}`);
-      } else {
-        existing = await existingRes.text();
+      try {
+        const res = await client.sourceGet(daPath);
+        existing = await res.text();
+      } catch (err) {
+        if (err instanceof DaApiError && err.status === 404) {
+          // new file — existing stays empty
+        } else {
+          throw err;
+        }
       }
 
       const diff = simpleDiff(existing, edsHtml);
