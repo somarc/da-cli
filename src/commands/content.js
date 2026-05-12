@@ -74,6 +74,8 @@ export function makeContentCommand() {
         process.exit(1);
       }
 
+      warnIfFragment(newContent, path);
+
       const client = await createClient();
 
       // Fetch existing content to show diff before the guard gate
@@ -168,6 +170,18 @@ export function makeContentCommand() {
     });
 
   return content;
+}
+
+// DA stores HTML as-is. Helix extracts only content inside <main>.
+// Fragments uploaded without <body><main> will preview as empty.
+function warnIfFragment(html, path) {
+  if (!/\.(html?)$/i.test(path)) return;
+  if (!/<main[\s>]/i.test(html) && !/<body[\s>]/i.test(html)) {
+    console.error(`Warning: ${path} has no <body> or <main> wrapper.`);
+    console.error('  Helix extracts only <main> content — fragments will render as empty.');
+    console.error('  Wrap content in: <body><header></header><main>...</main><footer></footer></body>');
+    console.error('');
+  }
 }
 
 function handleApiError(err) {

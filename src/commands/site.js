@@ -1,11 +1,12 @@
 import { Command } from 'commander';
+import { createClient, buildPlainHtmlUrl } from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
 
 // EDS site scaffolding — creates new sites using ai-ecoverse/snowflake as template.
 // Snowflake is the canonical EDS starter optimized for Stardust prototype conversion.
 
 const SNOWFLAKE_TEMPLATE = 'ai-ecoverse/snowflake';
-const HELIX_BOT_URL = 'https://github.com/apps/helix-bot';
+const AEM_SYNC_URL = 'https://github.com/apps/aem-sync';
 const DA_LIVE = 'https://da.live';
 
 export function makeSiteCommand() {
@@ -63,8 +64,9 @@ export function makeSiteCommand() {
       console.log('Site created successfully.');
       console.log('');
       console.log('Next steps:');
-      console.log(`  1. Install Helix Bot on the repo: ${HELIX_BOT_URL}`);
       if (opts.da !== false) {
+        console.log(`  1. Install AEM Sync on the repo: ${AEM_SYNC_URL}`);
+        console.log(`     (Required for Helix to read DA content — select repo: ${repoFull})`);
         console.log(`  2. Create DA repo at: ${DA_LIVE}`);
         console.log(`     Org: ${daOrg}  /  Repo: ${name}`);
         console.log(`  3. Run: da auth login`);
@@ -133,7 +135,7 @@ export function makeSiteCommand() {
   // ─── info ──────────────────────────────────────────────────────────────────
   site
     .command('info [repo]')
-    .description('Show EDS site info — preview/live URLs, DA mount, helix-bot status')
+    .description('Show EDS site info and pipeline health — DA mount, content pipeline, preview status')
     .option('--org <org>', 'GitHub org (default: configured org)')
     .action(async (repo, opts) => {
       const name = repo ?? (await resolveSiteName());
@@ -141,18 +143,91 @@ export function makeSiteCommand() {
 
       const previewUrl = `https://main--${name}--${ghUser}.aem.page`;
       const liveUrl = `https://main--${name}--${ghUser}.aem.live`;
-      const adminUrl = `https://admin.hlx.page/status/${ghUser}/${name}/main`;
 
-      print({
-        repo: `${ghUser}/${name}`,
-        preview: previewUrl,
-        live: liveUrl,
-        admin: adminUrl,
-        'helix-bot': `${HELIX_BOT_URL}/installations/new`,
-      });
+      info(`Checking pipeline health for ${ghUser}/${name}…`);
+
+      // Run checks in parallel
+      const [fstab, helixStatus, plainHtml] = await Promise.all([
+        checkFstab(ghUser, name),
+        checkHelixStatus(ghUser, name),
+        checkPlainHtml(ghUser, name),
+      ]);
+
+      const checks = [
+        { check: 'fstab.yaml on main',       status: fstab.ok ? 'ok' : 'MISSING', detail: fstab.mount ?? fstab.error },
+        { check: 'Helix content pipeline',    status: helixStatus.ok ? 'ok' : 'FAIL', detail: helixStatus.detail },
+        { check: 'Content non-empty',         status: plainHtml.ok ? 'ok' : plainHtml.status === 'empty' ? 'EMPTY' : 'FAIL', detail: plainHtml.detail },
+      ];
+
+      print(checks);
+      console.log('');
+      console.log(`Preview: ${previewUrl}`);
+      console.log(`Live:    ${liveUrl}`);
+
+      const hasBlocker = checks.some((c) => c.status !== 'ok');
+      if (hasBlocker) {
+        console.log('');
+        if (!fstab.ok) {
+          console.log('  fstab.yaml missing — push one mapping / to https://content.da.live/{org}/{repo}/');
+        }
+        if (fstab.ok && helixStatus.ok && plainHtml.status === 'empty') {
+          console.log('  Content pipeline empty. Check:');
+          console.log('    - DA documents must be wrapped in <body><header></header><main>...</main><footer></footer></body>');
+          console.log(`    - AEM Sync app installed on repo: ${AEM_SYNC_URL}`);
+        }
+      }
     });
 
   return site;
+}
+
+// ── Health check helpers ───────────────────────────────────────────────────────
+
+async function checkFstab(org, repo) {
+  const { execSync } = await import('node:child_process');
+  try {
+    const raw = execSync(`gh api repos/${org}/${repo}/contents/fstab.yaml --jq '.content'`, { encoding: 'utf8' }).trim();
+    const content = Buffer.from(raw, 'base64').toString('utf8');
+    const match = content.match(/\/:\s*(\S+)/);
+    return { ok: true, mount: match?.[1] ?? content.trim() };
+  } catch {
+    return { ok: false, error: 'not found' };
+  }
+}
+
+async function checkHelixStatus(org, repo) {
+  try {
+    const res = await fetch(`https://admin.hlx.page/status/${org}/${repo}/main/`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+    const data = await res.json();
+    const preview = data?.preview;
+    if (!preview) return { ok: false, detail: 'no preview entry' };
+    return {
+      ok: preview.status === 200,
+      detail: preview.status === 200
+        ? `${preview.status} (source: ${preview.sourceLocation ?? 'unknown'})`
+        : `status ${preview.status}`,
+    };
+  } catch (err) {
+    return { ok: false, detail: err.message };
+  }
+}
+
+async function checkPlainHtml(org, repo) {
+  const url = `https://main--${repo}--${org}.aem.page/index.plain.html`;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) return { ok: false, status: 'fail', detail: `HTTP ${res.status}` };
+    const body = (await res.text()).trim();
+    const isEmpty = body === '' || /^<div>\s*<\/div>$/i.test(body);
+    if (isEmpty) return { ok: false, status: 'empty', detail: 'Helix returned empty content — check DA document structure and AEM Sync' };
+    const preview = body.slice(0, 80).replace(/\s+/g, ' ');
+    return { ok: true, detail: preview };
+  } catch (err) {
+    return { ok: false, status: 'fail', detail: err.message };
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

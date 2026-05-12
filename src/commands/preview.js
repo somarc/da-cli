@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createClient, DaApiError } from '../lib/da-client.js';
+import { createClient, DaApiError, buildPlainHtmlUrl } from '../lib/da-client.js';
 import { print, info, verbose } from '../lib/output.js';
 
 export function makePreviewCommand() {
@@ -28,6 +28,7 @@ export function makePreviewCommand() {
         const url = result?.preview?.url;
         if (url) {
           console.log(url);
+          await verifyContentPipeline(client, path, url);
         } else {
           print(result);
         }
@@ -130,6 +131,32 @@ async function runConcurrent(tasks, concurrency) {
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
   return results;
+}
+
+// Fetch .plain.html and warn if the content pipeline returned empty content.
+// Empty means Helix built a preview but extracted nothing from the DA source.
+async function verifyContentPipeline(client, path, previewUrl) {
+  try {
+    const plainUrl = buildPlainHtmlUrl(
+      { org: client.org, repo: client.repo, branch: client.branch },
+      path,
+    );
+    const res = await fetch(plainUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) return; // 404/5xx — not an empty-content problem
+    const body = (await res.text()).trim();
+    const isEmpty = body === '' || /^<div>\s*<\/div>$/i.test(body);
+    if (isEmpty) {
+      console.error('');
+      console.error('Warning: preview URL returned but content pipeline is empty.');
+      console.error('Possible causes:');
+      console.error('  1. DA document lacks EDS structure — wrap content in <body><header></header><main>...</main><footer></footer></body>');
+      console.error('  2. AEM Sync GitHub App not installed — install at https://github.com/apps/aem-sync');
+      console.error('  3. fstab.yaml missing or not committed on main');
+      console.error(`  Verify: curl "${plainUrl}"`);
+    }
+  } catch {
+    // network error — skip verification silently
+  }
 }
 
 function handleApiError(err, path) {
