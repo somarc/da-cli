@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { setGlobals } from './lib/context.js';
+
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 import { makeAuthCommand } from './commands/auth.js';
 import { makeConfigCommand } from './commands/config.js';
 import { makeContentCommand } from './commands/content.js';
@@ -21,7 +24,7 @@ const program = new Command();
 program
   .name('da')
   .description('CLI for Adobe Edge Delivery Services via DA Admin API')
-  .version('0.1.0');
+  .version(version);
 
 program
   .option('--org <org>', 'DA org (overrides .da.json and ~/.da/config.json)')

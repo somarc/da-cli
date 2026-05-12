@@ -193,7 +193,10 @@ export function makeStardustCommand() {
         try { designMd = await readFile('DESIGN.md', 'utf8'); } catch { /* ok */ }
         const afterHtml = applyDesignToPage(beforeHtml, state.dimensions ?? {}, designMd);
 
-        // Write side-by-side viewer
+        // Persist raw afterHtml so migrate can push it directly (never touch the viewer wrapper)
+        await writeFile(`.stardust/prototypes/${slug}.after.html`, afterHtml, 'utf8');
+
+        // Write side-by-side viewer (for human review only — not uploaded to DA)
         const viewer = generatePrototypeViewer(pagePath, beforeHtml, afterHtml, state);
         await writeFile(`.stardust/prototypes/${slug}.html`, viewer, 'utf8');
 
@@ -245,13 +248,10 @@ export function makeStardustCommand() {
 
         const slug = pagePath.replace(/\//g, '-').replace(/^-/, '') || 'index';
 
-        // Use prototype if available, else use extracted HTML
+        // Prefer the raw after HTML persisted by `prototype`; fall back to extracted page
         let sourceHtml = '';
         try {
-          sourceHtml = await readFile(`.stardust/prototypes/${slug}.html`, 'utf8');
-          // Extract only the "after" panel content from the prototype viewer
-          const afterMatch = sourceHtml.match(/<!-- stardust:after -->([\s\S]*?)<!-- \/stardust:after -->/);
-          if (afterMatch) sourceHtml = afterMatch[1];
+          sourceHtml = await readFile(`.stardust/prototypes/${slug}.after.html`, 'utf8');
         } catch {
           try {
             sourceHtml = await readFile(`.stardust/current/${slug}.html`, 'utf8');
@@ -266,7 +266,8 @@ export function makeStardustCommand() {
         // Write to .stardust/migrated/ for local reference
         await writeFile(`.stardust/migrated/${slug}.html`, migratedHtml, 'utf8');
 
-        // Push to DA
+        // Push to DA — only advance state on success
+        let pushed = false;
         try {
           await client.sourcePut(pagePath.endsWith('.html') ? pagePath : `${pagePath}.html`, migratedHtml);
           info(`  pushed: ${pagePath} → DA`);
@@ -275,17 +276,22 @@ export function makeStardustCommand() {
           await client.daPreviewFlush(pagePath);
           await client.helixPreview(pagePath);
           info(`  previewed: ${pagePath}`);
+          pushed = true;
         } catch (err) {
           info(`  DA push failed for ${pagePath}: ${err.message}`);
         }
 
-        const pg = (state.pages ?? []).find((p) => p.path === pagePath);
-        if (pg) pg.status = 'migrated';
-        migrated++;
+        if (pushed) {
+          const pg = (state.pages ?? []).find((p) => p.path === pagePath);
+          if (pg) pg.status = 'migrated';
+          migrated++;
+        }
       }
 
-      state.phase = 'migrated';
-      state.migratedAt = new Date().toISOString();
+      if (migrated > 0) {
+        state.phase = 'migrated';
+        state.migratedAt = new Date().toISOString();
+      }
       await writeJson('.stardust/state.json', state);
 
       info(`\n${migrated} page(s) migrated → DA + Helix preview triggered`);

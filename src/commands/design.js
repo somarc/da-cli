@@ -68,7 +68,7 @@ export function makeDesignCommand() {
   // ─── audit ─────────────────────────────────────────────────────────────────
   design
     .command('audit <source>')
-    .description('Full design + semantic audit — combines da audit semantics with impeccable anti-pattern scan')
+    .description('Comprehensive impeccable scan across all categories (ai-slop + quality + eds) with fix hints')
     .option('--severity <sev>', 'Minimum severity', 'warning')
     .action(async (source, opts) => {
       const html = await fetchHtml(source);
@@ -145,11 +145,12 @@ async function fetchHtml(source) {
     }
   }
 
-  // DA path — fetch .plain.html from EDS preview
-  const { createClient } = await import('../lib/da-client.js');
-  const client = await createClient();
+  // DA path — fetch .plain.html from EDS preview (no auth required for public pages)
+  const { fetchPlainHtml, DaApiError } = await import('../lib/da-client.js');
+  const { resolveConfig } = await import('../lib/config.js');
   try {
-    return await client.fetchPlainHtml(source);
+    const { org, repo, config } = await resolveConfig({});
+    return await fetchPlainHtml({ org, repo, branch: config.branch ?? 'main' }, source);
   } catch (err) {
     console.error(`Cannot fetch HTML for "${source}": ${err.message}`);
     process.exit(1);

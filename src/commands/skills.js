@@ -158,19 +158,22 @@ function buildFlags(opts) {
 async function runUpskill(args) {
   const { spawn } = await import('node:child_process');
 
-  // Try upskill first; if not found, try gh upskill (gh extension form)
+  // Try each candidate; ENOENT means binary not found (not exit code 127)
   const candidates = ['upskill', 'gh upskill'];
   for (const cmd of candidates) {
     const [bin, ...rest] = cmd.split(' ');
-    const proc = spawn(bin, [...rest, ...args], { stdio: 'inherit' });
-    const code = await new Promise((resolve) => proc.on('close', resolve));
-    if (code !== 127 && code !== null) {
-      if (code !== 0) process.exit(code);
-      return;
-    }
+    const code = await new Promise((resolve) => {
+      const proc = spawn(bin, [...rest, ...args], { stdio: 'inherit' });
+      proc.on('error', (err) => resolve(err.code === 'ENOENT' ? 'ENOENT' : 'ERROR'));
+      proc.on('close', resolve);
+    });
+    if (code === 'ENOENT') continue;   // binary not found — try next candidate
+    if (code === 'ERROR') continue;    // other spawn error — try next candidate
+    if (code !== 0) process.exit(code);
+    return;
   }
 
-  // upskill not installed — guide user to bootstrap
+  // neither candidate found — guide user to bootstrap
   console.error('upskill CLI not found. Run: da skills bootstrap');
   console.error(`Or manually: curl -fsSL ${UPSKILL_INSTALLER} | bash`);
   process.exit(1);

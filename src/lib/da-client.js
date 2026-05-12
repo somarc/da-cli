@@ -234,11 +234,9 @@ export class DaClient {
     return res.text();
   }
 
-  // Fetch .plain.html from an EDS preview URL or page URL
+  // Instance method — uses configured branch (not hardcoded 'main')
   async fetchPlainHtml(path) {
-    const plain = path.replace(/\.html$/, '') + '.plain.html';
-    const previewBase = `https://main--${this._repoRequired()}--${this.org}.aem.page`;
-    return this.fetchPage(`${previewBase}${norm(plain)}`);
+    return fetchPlainHtml({ org: this.org, repo: this._repoRequired(), branch: this.branch }, path);
   }
 
   _repoRequired() {
@@ -264,6 +262,16 @@ function norm(p) {
 // Helix admin uses web paths (no .html extension, no leading slash in URL segment)
 function helixPath(p) {
   return p.replace(/\.html$/, '').replace(/^\//, '') || 'index';
+}
+
+// Static unauthenticated helper — used by `da design` and `da stardust` when no
+// auth token is available or needed (reads from public aem.page preview URLs).
+export async function fetchPlainHtml({ org, repo, branch = 'main' }, path) {
+  const plain = path.replace(/\.html$/, '') + '.plain.html';
+  const url = `https://${branch}--${repo}--${org}.aem.page${norm(plain)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new DaApiError(res.status, url, '');
+  return res.text();
 }
 
 // Factory — reads context and auth, constructs a ready DaClient
