@@ -6,7 +6,7 @@ CLI for Adobe Edge Delivery Services via the DA Admin API.
 npm install -g @somarc/da-cli
 ```
 
-Requires Node >= 18. Zero runtime dependencies beyond `commander` and `js-yaml`.
+Requires Node >= 18 and Python 3 (used by `da auth login` to cache the token). Zero npm runtime dependencies beyond `commander` and `js-yaml`.
 
 ---
 
@@ -93,7 +93,9 @@ Tokens are cached at `~/.aem/da-token.json`.
 
 ### `da auth login`
 
-Obtain and cache a Bearer token via `da-auth-helper`.
+Obtain and cache a Bearer token. Requires:
+- `npx` (bundled with Node) to invoke `github:adobe-rnd/da-auth-helper` (fetched on first login)
+- `python3` in PATH (used to write the token cache at `~/.aem/da-token.json`)
 
 ```bash
 da auth login            # uses cached token if still valid
