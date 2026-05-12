@@ -3,12 +3,21 @@
   "version": "0.2.0",
   "description": "CLI for Adobe Edge Delivery Services via DA Admin API",
   "type": "module",
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
   "bin": {
-    "da": "./bin/da.js"
+    "da": "bin/da.js"
   },
   "exports": "./src/index.js",
   "scripts": {
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test src/**/*.test.js",
+    "prepublishOnly": "npm test"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",

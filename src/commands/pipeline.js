@@ -191,6 +191,7 @@ function executeStep(step, pipelineContext, timeoutMs) {
   if (repo) rootFlags.push('--repo', repo);
   if (env) rootFlags.push('--env', env);
   if (globals.commit) rootFlags.push('--commit');
+  if (globals.dryRun) rootFlags.push('--dry-run');
   if (globals.format) rootFlags.push('--format', globals.format);
 
   // Parse the step's command string into argv

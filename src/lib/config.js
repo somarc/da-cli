@@ -9,11 +9,17 @@ const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.da', 'config.json');
 const PROJECT_CONFIG_FILE = '.da.json';
 
 async function readJson(p) {
+  let raw;
   try {
-    const raw = await readFile(p, 'utf8');
+    raw = await readFile(p, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return {};
+    throw new Error(`Cannot read config file ${p}: ${err.message}`);
+  }
+  try {
     return JSON.parse(raw);
-  } catch {
-    return {};
+  } catch (err) {
+    throw new Error(`Malformed JSON in config file ${p}: ${err.message}`);
   }
 }
 

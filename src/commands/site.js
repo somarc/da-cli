@@ -138,20 +138,22 @@ export function makeSiteCommand() {
     .command('info [repo]')
     .description('Show EDS site info and pipeline health — DA mount, content pipeline, preview status')
     .option('--org <org>', 'GitHub org (default: configured org)')
+    .option('--branch <branch>', 'Branch to check (default: main)')
     .action(async (repo, opts) => {
       const name = repo ?? (await resolveSiteName());
       const ghUser = opts.org ?? await getGhUser();
+      const branch = opts.branch ?? 'main';
 
-      const previewUrl = `https://main--${name}--${ghUser}.aem.page`;
-      const liveUrl = `https://main--${name}--${ghUser}.aem.live`;
+      const previewUrl = `https://${branch}--${name}--${ghUser}.aem.page`;
+      const liveUrl = `https://${branch}--${name}--${ghUser}.aem.live`;
 
-      info(`Checking pipeline health for ${ghUser}/${name}…`);
+      info(`Checking pipeline health for ${ghUser}/${name} (branch: ${branch})…`);
 
       // Run checks in parallel
       const [fstab, helixStatus, plainHtml] = await Promise.all([
         checkFstab(ghUser, name),
-        checkHelixStatus(ghUser, name),
-        checkPlainHtml(ghUser, name),
+        checkHelixStatus(ghUser, name, branch),
+        checkPlainHtml(ghUser, name, branch),
       ]);
 
       const checks = [
@@ -196,9 +198,9 @@ async function checkFstab(org, repo) {
   }
 }
 
-async function checkHelixStatus(org, repo) {
+async function checkHelixStatus(org, repo, branch = 'main') {
   try {
-    const res = await fetch(`https://admin.hlx.page/status/${org}/${repo}/main/`, {
+    const res = await fetch(`https://admin.hlx.page/status/${org}/${repo}/${branch}/`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
     });
     if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
@@ -216,8 +218,8 @@ async function checkHelixStatus(org, repo) {
   }
 }
 
-async function checkPlainHtml(org, repo) {
-  const url = buildPlainHtmlUrl({ org, repo, branch: 'main' }, '/');
+async function checkPlainHtml(org, repo, branch = 'main') {
+  const url = buildPlainHtmlUrl({ org, repo, branch }, '/');
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!res.ok) return { ok: false, status: 'fail', detail: `HTTP ${res.status}` };

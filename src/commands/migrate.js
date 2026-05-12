@@ -30,10 +30,14 @@ export function makeMigrateCommand() {
       info(`Title: ${metadata.title ?? '(none)'}`);
 
       let existing = '';
-      try {
-        const res = await client.sourceGet(daPath);
-        existing = await res.text();
-      } catch { /* new file */ }
+      const existingRes = await client.sourceGet(daPath);
+      if (existingRes.status === 404) {
+        // new file — existing stays empty
+      } else if (!existingRes.ok) {
+        throw new Error(`Failed to fetch existing content at ${daPath}: HTTP ${existingRes.status}`);
+      } else {
+        existing = await existingRes.text();
+      }
 
       const diff = simpleDiff(existing, edsHtml);
       if (!guardWrite(`Upload ${daPath}`).proceed) {

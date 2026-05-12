@@ -13,10 +13,11 @@ export class DaClient {
   constructor({ org, repo, env = 'prod', branch = 'main', token }) {
     if (!org) throw new Error('org is required — run `da config set org <org>` or pass --org');
     if (!token) throw new Error('no auth token — run `da auth login` first');
+    if (!BASE_URLS[env]) throw new Error(`unknown --env "${env}" — valid values: ${Object.keys(BASE_URLS).join(', ')}`);
     this.org = org;
     this.repo = repo;
     this.branch = branch;
-    this.baseUrl = BASE_URLS[env] ?? BASE_URLS.prod;
+    this.baseUrl = BASE_URLS[env];
     this.token = token;
   }
 

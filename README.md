@@ -89,7 +89,7 @@ da config show --json
 
 ## Authentication
 
-Tokens are cached at `~/.da/da-token.json`.
+Tokens are cached at `~/.aem/da-token.json`.
 
 ### `da auth login`
 
