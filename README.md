@@ -40,6 +40,11 @@ These flags apply to every command and are resolved before any subcommand runs.
 | `--quiet` | Suppress progress output, print only results |
 | `--verbose` | Print full request/response details |
 
+Notes:
+- Root `--env` means the **DA admin environment**: `dev | stage | prod`.
+- `da index validate` and `da index query` also define a **subcommand-local** `--env` with a different meaning: `preview | live`.
+- For write operations, prefer passing root flags before the subcommand, for example: `da --commit publish page /index`.
+
 ---
 
 ## Configuration
@@ -49,6 +54,8 @@ Config is resolved in this precedence order (highest wins):
 ```
 CLI flags  >  per-command overrides  >  project .da.json  >  ~/.da/config.json  >  defaults
 ```
+
+In addition to `org`, `repo`, and `env`, config may also include `branch`. Commands that support `--branch` use that as the default when the flag is omitted.
 
 ### `da config init`
 
@@ -74,6 +81,7 @@ Write a key to project or global config.
 ```bash
 da config set repo my-site
 da config set org my-org --global
+da config set branch feature/my-work
 ```
 
 ### `da config show`
@@ -263,6 +271,32 @@ da publish unpublish /old-page --commit
 
 ---
 
+## Deploy
+
+Runs the normal 2-step workflow in one command: preview first, then publish. Preview always runs; publish is still gated by root `--commit`.
+
+### `da deploy page <path>`
+
+Preview a single page, then promote it to live CDN if `--commit` is set.
+
+```bash
+da deploy page /index
+da --commit deploy page /index
+da --commit deploy page /blog/post --branch feature-branch
+```
+
+### `da deploy pages <source>`
+
+Batch preview first, then publish only the pages that previewed successfully.
+
+```bash
+da deploy pages /blog
+da --commit deploy pages /blog --concurrency 10
+da --commit deploy pages paths.txt --branch feature-branch
+```
+
+---
+
 ## Route
 
 Classify and manage DA route ownership. Used before any destructive content operation to understand who owns a route.
@@ -326,6 +360,8 @@ da index show --file ./helix-query.yaml
 
 Check that fields defined in `helix-query.yaml` exist in the live query-index responses.
 
+Note: this subcommand's `--env` means query target host (`preview` or `live`), not the root DA admin environment flag.
+
 ```bash
 da index validate
 da index validate --env preview
@@ -336,6 +372,8 @@ Exits with code 1 if any fields are missing from the live index.
 ### `da index query <index-name>`
 
 Run a live query against a named index.
+
+Note: this subcommand's `--env` means query target host (`preview` or `live`), not the root DA admin environment flag.
 
 ```bash
 da index query blog
@@ -685,6 +723,7 @@ Show EDS site pipeline health — checks `fstab.yaml`, Helix content pipeline, a
 ```bash
 da site info
 da site info my-site --org my-org
+da site info my-site --org my-org --branch feature-branch
 ```
 
 ---
@@ -766,13 +805,14 @@ da skills update impeccable
 
 ## Safety model
 
-Write operations (put, delete, move, copy, publish, migrate, clean) are **dry-run by default**. They show what would change (diff, classification, or plan) without mutating anything.
+Write operations (put, delete, move, copy, publish, deploy, migrate, clean, sidekick set, purge) are **dry-run by default**. They show what would change (diff, classification, or plan) without mutating anything.
 
 Pass `--commit` at the root level to enable writes:
 
 ```bash
 da --commit content put /index.html ./index.html
 da --commit publish page /index
+da --commit deploy page /index
 ```
 
 The `--commit` flag propagates through pipeline steps, so a single flag at the root gates an entire pipeline run.
@@ -797,6 +837,13 @@ da preview page /
 ```bash
 da preview pages /blog --concurrency 10
 da --commit publish pages /blog --concurrency 10
+```
+
+### Preview + publish in one command
+
+```bash
+da --commit deploy page /index
+da --commit deploy pages /blog --concurrency 10
 ```
 
 ### Import and publish an external page
