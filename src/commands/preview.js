@@ -133,6 +133,12 @@ async function runConcurrent(tasks, concurrency) {
   return results;
 }
 
+// Exported for testing — pure check with no side effects.
+export function isEmptyContent(body) {
+  const t = body.trim();
+  return t === '' || /^<div>\s*<\/div>$/i.test(t);
+}
+
 // Fetch .plain.html and warn if the content pipeline returned empty content.
 // Empty means Helix built a preview but extracted nothing from the DA source.
 async function verifyContentPipeline(client, path, previewUrl) {
@@ -143,9 +149,8 @@ async function verifyContentPipeline(client, path, previewUrl) {
     );
     const res = await fetch(plainUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!res.ok) return; // 404/5xx — not an empty-content problem
-    const body = (await res.text()).trim();
-    const isEmpty = body === '' || /^<div>\s*<\/div>$/i.test(body);
-    if (isEmpty) {
+    const body = await res.text();
+    if (isEmptyContent(body)) {
       console.error('');
       console.error('Warning: preview URL returned but content pipeline is empty.');
       console.error('Possible causes:');

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { createClient, buildPlainHtmlUrl } from '../lib/da-client.js';
+import { isEmptyContent } from './preview.js';
 import { print, info } from '../lib/output.js';
 
 // EDS site scaffolding — creates new sites using ai-ecoverse/snowflake as template.
@@ -216,14 +217,13 @@ async function checkHelixStatus(org, repo) {
 }
 
 async function checkPlainHtml(org, repo) {
-  const url = `https://main--${repo}--${org}.aem.page/index.plain.html`;
+  const url = buildPlainHtmlUrl({ org, repo, branch: 'main' }, '/');
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!res.ok) return { ok: false, status: 'fail', detail: `HTTP ${res.status}` };
-    const body = (await res.text()).trim();
-    const isEmpty = body === '' || /^<div>\s*<\/div>$/i.test(body);
-    if (isEmpty) return { ok: false, status: 'empty', detail: 'Helix returned empty content — check DA document structure and AEM Sync' };
-    const preview = body.slice(0, 80).replace(/\s+/g, ' ');
+    const body = await res.text();
+    if (isEmptyContent(body)) return { ok: false, status: 'empty', detail: 'Helix returned empty content — check DA document structure and AEM Sync' };
+    const preview = body.trim().slice(0, 80).replace(/\s+/g, ' ');
     return { ok: true, detail: preview };
   } catch (err) {
     return { ok: false, status: 'fail', detail: err.message };

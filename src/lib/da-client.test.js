@@ -23,9 +23,12 @@ describe('buildPlainHtmlUrl — production URL construction', () => {
     assert.ok(url.endsWith('/page.plain.html'), `got: ${url}`);
   });
 
-  it('handles root path', () => {
+  it('handles root path — canonical URL used by site info health probe', () => {
+    // site info passes '/' to buildPlainHtmlUrl; must resolve to /.plain.html,
+    // not /index.plain.html, so the check is consistent with the EDS router.
     const url = buildPlainHtmlUrl({ org: 'o', repo: 'r', branch: 'main' }, '/');
     assert.ok(url.endsWith('/.plain.html'), `got: ${url}`);
+    assert.ok(!url.endsWith('/index.plain.html'), `unexpected /index.plain.html: ${url}`);
   });
 
   it('is a pure function — no side effects, no auth token required', () => {

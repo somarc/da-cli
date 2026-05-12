@@ -172,16 +172,25 @@ export function makeContentCommand() {
   return content;
 }
 
+// Exported for testing — pure detection with no side effects.
+export function fragmentDiagnostic(html, path) {
+  if (!/\.html?$/i.test(path)) return null;
+  if (/<main[\s>]/i.test(html)) return null;
+  return { missingBody: !/<body[\s>]/i.test(html) };
+}
+
 // DA stores HTML as-is. Helix extracts only content inside <main>.
-// Fragments uploaded without <body><main> will preview as empty.
 function warnIfFragment(html, path) {
-  if (!/\.(html?)$/i.test(path)) return;
-  if (!/<main[\s>]/i.test(html) && !/<body[\s>]/i.test(html)) {
-    console.error(`Warning: ${path} has no <body> or <main> wrapper.`);
-    console.error('  Helix extracts only <main> content — fragments will render as empty.');
-    console.error('  Wrap content in: <body><header></header><main>...</main><footer></footer></body>');
-    console.error('');
+  const diag = fragmentDiagnostic(html, path);
+  if (!diag) return;
+  console.error(`Warning: ${path} has no <main> wrapper.`);
+  console.error('  Helix extracts only <main> content — this document will render empty.');
+  if (diag.missingBody) {
+    console.error('  Full EDS structure needed: <body><header></header><main>...</main><footer></footer></body>');
+  } else {
+    console.error('  Add <main> around your page content.');
   }
+  console.error('');
 }
 
 function handleApiError(err) {
