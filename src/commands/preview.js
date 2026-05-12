@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { createClient, DaApiError, buildPlainHtmlUrl } from '../lib/da-client.js';
 import { print, info, verbose } from '../lib/output.js';
+import { resolvePaths, runConcurrent } from '../lib/paths.js';
 
 export function makePreviewCommand() {
   const preview = new Command('preview').description('Trigger EDS preview pipeline — updates *.aem.page only; run `da publish` to promote to *.aem.live');
@@ -88,50 +89,6 @@ export function makePreviewCommand() {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-async function resolvePaths(source) {
-  const { statSync } = await import('node:fs');
-  try {
-    if (statSync(source).isFile()) {
-      const { readFile } = await import('node:fs/promises');
-      const text = await readFile(source, 'utf8');
-      return text.split('\n').map((l) => l.trim()).filter(Boolean);
-    }
-  } catch {
-    // not a local file — fall through to DA prefix listing
-  }
-
-  // Treat as a DA path prefix — recursively collect all file paths under it
-  const client = await createClient();
-  const start = source.replace(/\*$/, '').replace(/\/$/, '') || '/';
-  const results = [];
-  const queue = [start];
-  while (queue.length) {
-    const current = queue.shift();
-    const data = await client.list(current);
-    const items = Array.isArray(data) ? data : (data?.sources ?? []);
-    for (const item of items) {
-      const rel = item.path.replace(`/${client.org}/${client.repo}`, '');
-      if (item.ext) results.push(rel);
-      else queue.push(rel);
-    }
-  }
-  return results;
-}
-
-// Simple manual concurrency pool — no external deps
-async function runConcurrent(tasks, concurrency) {
-  const results = new Array(tasks.length);
-  let next = 0;
-  async function worker() {
-    while (next < tasks.length) {
-      const i = next++;
-      results[i] = await tasks[i]();
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  return results;
-}
 
 // Exported for testing — pure check with no side effects.
 export function isEmptyContent(body) {
