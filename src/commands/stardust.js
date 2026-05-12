@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { print, info } from '../lib/output.js';
+import { freshState, loadState, setPageMigrated, finalizeGlobalState } from '../lib/stardust-state.js';
 
 // Stardust redesign pipeline for EDS sites.
 // Four phases: extract → direct → prototype → migrate
@@ -242,26 +243,25 @@ export function makeStardustCommand() {
       let designMd = '';
       try { designMd = await readFile('DESIGN.md', 'utf8'); } catch { /* ok */ }
 
-      let migrated = 0;
       for (const pagePath of pages) {
         if (!guardWrite(`Migrate ${pagePath} to DA`).proceed) continue;
 
         const slug = pagePath.replace(/\//g, '-').replace(/^-/, '') || 'index';
 
-        // Prefer the raw after HTML persisted by `prototype`; fall back to extracted page
-        let sourceHtml = '';
+        // Prefer the already-transformed after HTML from prototype; only apply
+        // design transform when falling back to raw extracted HTML.
+        let migratedHtml = '';
         try {
-          sourceHtml = await readFile(`.stardust/prototypes/${slug}.after.html`, 'utf8');
+          migratedHtml = await readFile(`.stardust/prototypes/${slug}.after.html`, 'utf8');
         } catch {
           try {
-            sourceHtml = await readFile(`.stardust/current/${slug}.html`, 'utf8');
+            const rawHtml = await readFile(`.stardust/current/${slug}.html`, 'utf8');
+            migratedHtml = applyDesignToPage(rawHtml, state.dimensions ?? {}, designMd);
           } catch {
             info(`  no source HTML for ${pagePath}, skipping`);
             continue;
           }
         }
-
-        const migratedHtml = applyDesignToPage(sourceHtml, state.dimensions ?? {}, designMd);
 
         // Write to .stardust/migrated/ for local reference
         await writeFile(`.stardust/migrated/${slug}.html`, migratedHtml, 'utf8');
@@ -282,16 +282,11 @@ export function makeStardustCommand() {
         }
 
         if (pushed) {
-          const pg = (state.pages ?? []).find((p) => p.path === pagePath);
-          if (pg) pg.status = 'migrated';
-          migrated++;
+          setPageMigrated(state, pagePath);
         }
       }
 
-      if (migrated > 0) {
-        state.phase = 'migrated';
-        state.migratedAt = new Date().toISOString();
-      }
+      const migrated = finalizeGlobalState(state);
       await writeJson('.stardust/state.json', state);
 
       info(`\n${migrated} page(s) migrated → DA + Helix preview triggered`);
@@ -312,21 +307,8 @@ export function makeStardustCommand() {
 }
 
 // ── State machine ─────────────────────────────────────────────────────────────
-
-function freshState() {
-  return { phase: 'fresh', pages: [], createdAt: new Date().toISOString() };
-}
-
-async function loadState() {
-  const { readFile, mkdir } = await import('node:fs/promises');
-  try {
-    await mkdir('.stardust', { recursive: true });
-    const raw = await readFile('.stardust/state.json', 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return freshState();
-  }
-}
+// freshState / loadState / setPageMigrated / finalizeGlobalState live in
+// src/lib/stardust-state.js and are imported at the top of this file.
 
 function printStateReport(state) {
   const phase = state.phase ?? 'fresh';

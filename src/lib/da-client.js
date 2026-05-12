@@ -264,11 +264,16 @@ function helixPath(p) {
   return p.replace(/\.html$/, '').replace(/^\//, '') || 'index';
 }
 
+// Pure URL builder — exported so tests can assert against production logic.
+export function buildPlainHtmlUrl({ org, repo, branch = 'main' }, path) {
+  const plain = path.replace(/\.html$/, '') + '.plain.html';
+  return `https://${branch}--${repo}--${org}.aem.page${norm(plain)}`;
+}
+
 // Static unauthenticated helper — used by `da design` and `da stardust` when no
 // auth token is available or needed (reads from public aem.page preview URLs).
 export async function fetchPlainHtml({ org, repo, branch = 'main' }, path) {
-  const plain = path.replace(/\.html$/, '') + '.plain.html';
-  const url = `https://${branch}--${repo}--${org}.aem.page${norm(plain)}`;
+  const url = buildPlainHtmlUrl({ org, repo, branch }, path);
   const res = await fetch(url, { headers: { 'User-Agent': UA } });
   if (!res.ok) throw new DaApiError(res.status, url, '');
   return res.text();
