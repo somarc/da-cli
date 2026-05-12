@@ -136,6 +136,111 @@ export class DaClient {
     return res.json().catch(() => ({}));
   }
 
+  // ── Helix admin code bus ─────────────────────────────────────────────────────
+  // Triggers a code-bus sync for a path (kicks the CDN invalidation for JS/CSS/etc.)
+  async helixCodeSync(path) {
+    const res = await this._helixFetch(
+      `/code/${this.org}/${this._repoRequired()}/${this.branch}/${helixPath(path)}`,
+      { method: 'POST' },
+    );
+    return res.json().catch(() => ({}));
+  }
+
+  async helixCodeStatus(path) {
+    const res = await this._helixFetch(
+      `/code/${this.org}/${this._repoRequired()}/${this.branch}/${helixPath(path)}`,
+    );
+    return res.json();
+  }
+
+  // ── Helix async job polling ──────────────────────────────────────────────────
+  async helixJob(jobId) {
+    const res = await this._helixFetch(`/job/${jobId}/details`);
+    return res.json();
+  }
+
+  // Poll a job until it reaches a terminal state (success/stopped/failed).
+  async helixJobWait(jobId, { intervalMs = 2000, timeoutMs = 120_000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const job = await this.helixJob(jobId);
+      const state = job?.state ?? job?.status;
+      if (state === 'stopped' || state === 'failed' || state === 'success') return job;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error(`Job ${jobId} did not complete within ${timeoutMs / 1000}s`);
+  }
+
+  // ── Helix bulk preview/publish ───────────────────────────────────────────────
+  // Submits a bulk job and returns the job descriptor immediately.
+  async helixBulkPreview(paths) {
+    const res = await this._helixFetch(
+      `/preview/${this.org}/${this._repoRequired()}/${this.branch}/*`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: paths.map((p) => helixPath(p)) }),
+      },
+    );
+    return res.json();
+  }
+
+  async helixBulkLive(paths) {
+    const res = await this._helixFetch(
+      `/live/${this.org}/${this._repoRequired()}/${this.branch}/*`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: paths.map((p) => helixPath(p)) }),
+      },
+    );
+    return res.json();
+  }
+
+  // ── Helix sidekick config ────────────────────────────────────────────────────
+  async helixSidekickConfig() {
+    const res = await this._helixFetch(
+      `/sidekick/${this.org}/${this._repoRequired()}`,
+    );
+    return res.json();
+  }
+
+  async helixSidekickUpdate(cfg) {
+    const res = await this._helixFetch(
+      `/sidekick/${this.org}/${this._repoRequired()}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      },
+    );
+    return res.json().catch(() => ({}));
+  }
+
+  // ── Helix CDN cache purge ────────────────────────────────────────────────────
+  async helixCachePurge(path) {
+    const res = await this._helixFetch(
+      `/cache/${this.org}/${this._repoRequired()}/${this.branch}/${helixPath(path)}`,
+      { method: 'POST' },
+    );
+    return res.json().catch(() => ({}));
+  }
+
+  // ── Public page fetch (no auth, reads from aem.page / aem.live) ─────────────
+  // Used by design detect and stardust extract to read rendered EDS pages.
+  async fetchPage(url) {
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) throw new DaApiError(res.status, url, '');
+    return res.text();
+  }
+
+  // Fetch .plain.html from an EDS preview URL or page URL
+  async fetchPlainHtml(path) {
+    const plain = path.replace(/\.html$/, '') + '.plain.html';
+    const previewBase = `https://main--${this._repoRequired()}--${this.org}.aem.page`;
+    return this.fetchPage(`${previewBase}${norm(plain)}`);
+  }
+
   _repoRequired() {
     if (!this.repo) throw new Error('repo is required — run `da config set repo <repo>` or pass --repo');
     return this.repo;

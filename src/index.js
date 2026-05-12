@@ -10,6 +10,11 @@ import { makeIndexCommand } from './commands/index.js';
 import { makeAuditCommand } from './commands/audit.js';
 import { makeMigrateCommand } from './commands/migrate.js';
 import { makePipelineCommand } from './commands/pipeline.js';
+import { makeCodeCommand } from './commands/code.js';
+import { makeDesignCommand } from './commands/design.js';
+import { makeStardustCommand } from './commands/stardust.js';
+import { makeSiteCommand } from './commands/site.js';
+import { makeSkillsCommand } from './commands/skills.js';
 
 const program = new Command();
 
@@ -44,5 +49,10 @@ program.addCommand(makeIndexCommand());
 program.addCommand(makeAuditCommand());
 program.addCommand(makeMigrateCommand());
 program.addCommand(makePipelineCommand());
+program.addCommand(makeCodeCommand());
+program.addCommand(makeDesignCommand());
+program.addCommand(makeStardustCommand());
+program.addCommand(makeSiteCommand());
+program.addCommand(makeSkillsCommand());
 
 program.parseAsync(process.argv);
