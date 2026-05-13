@@ -124,34 +124,39 @@ export function createServer({ walletAddress } = {}) {
   });
 
   // ── Pipelines ────────────────────────────────────────────────────────────────
-  // Unified handler: accepts { pipeline } for named or { yaml } for custom YAML.
-  // Both resolve to the same execution path; the distinction only matters for
-  // discovery / documentation purposes (both are priced at $0.25).
+  // /v1/pipeline/run ($0.15) — named pipelines only ({ pipeline: "name" }).
+  // Submitting { yaml } here returns 400 with an explicit redirect to /custom,
+  // so agents discover the premium endpoint rather than hitting the wrong tier.
   app.post('/v1/pipeline/run', async (req, res) => {
     const { pipeline: pipelineName, yaml, ...body } = req.body ?? {};
 
-    if (!pipelineName && !yaml) {
+    if (yaml) {
       return res.status(400).json({
-        error: 'Either pipeline (named) or yaml (custom YAML) is required',
+        error: 'Custom YAML pipelines must use POST /v1/pipeline/custom ($0.25)',
+        hint: 'POST /v1/pipeline/run accepts only named pipelines ({ pipeline: "name" }). Submit { yaml } to POST /v1/pipeline/custom for the agent-authored pipeline capability.',
+      });
+    }
+
+    if (!pipelineName) {
+      return res.status(400).json({
+        error: 'pipeline name required',
+        hint: 'Pass { pipeline: "name" } to run a named pipeline, or use POST /v1/pipeline/custom with { yaml } for a custom YAML pipeline.',
+      });
+    }
+
+    const pipelineFile = await resolvePipelineName(pipelineName);
+    if (!pipelineFile) {
+      return res.status(404).json({
+        error: `Pipeline '${pipelineName}' not found in ~/.da/pipelines/`,
+        hint: 'To run a custom pipeline, use POST /v1/pipeline/custom with a { yaml } body.',
       });
     }
 
     let yamlContent;
-    if (yaml) {
-      yamlContent = yaml;
-    } else {
-      const pipelineFile = await resolvePipelineName(pipelineName);
-      if (!pipelineFile) {
-        return res.status(404).json({
-          error: `Pipeline '${pipelineName}' not found in ~/.da/pipelines/`,
-          hint: 'Provide yaml field to submit a custom YAML pipeline instead.',
-        });
-      }
-      try {
-        yamlContent = await readFile(pipelineFile, 'utf8');
-      } catch {
-        return res.status(500).json({ error: 'Failed to read named pipeline file' });
-      }
+    try {
+      yamlContent = await readFile(pipelineFile, 'utf8');
+    } catch {
+      return res.status(500).json({ error: 'Failed to read named pipeline file' });
     }
 
     if (hasApprovalGates(yamlContent)) {
@@ -167,13 +172,13 @@ export function createServer({ walletAddress } = {}) {
     res.status(result.ok ? 200 : 500).json(result);
   });
 
-  // Compat alias — delegates entirely to /v1/pipeline/run logic with { yaml }.
+  // /v1/pipeline/custom ($0.25) — agent-authored YAML pipelines ({ yaml }).
+  // This is the premium tier: agents compose any sequence of DA operations.
   app.post('/v1/pipeline/custom', async (req, res) => {
     const { yaml, ...body } = req.body ?? {};
     if (!yaml) {
       return res.status(400).json({
-        error: 'yaml required',
-        hint: 'Use POST /v1/pipeline/run with { yaml } field — same endpoint, same price.',
+        error: 'yaml required — submit your full pipeline YAML descriptor in the yaml field',
       });
     }
     if (hasApprovalGates(yaml)) {

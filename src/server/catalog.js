@@ -59,24 +59,22 @@ export const ROUTE_CATALOG = [
   },
   {
     route: 'POST /v1/pipeline/run',
-    price: '$0.25',
+    price: '$0.15',
     description:
-      'Execute a pipeline. Pass { pipeline: "name" } to run a named pipeline from ' +
-      '~/.da/pipelines/, or { yaml: "..." } to submit a custom agent-authored YAML ' +
-      'pipeline descriptor — the highest-value capability. Steps with requires_approval ' +
-      'are rejected (no interactive stdin in the HTTP context).',
-    body: {
-      pipeline: 'string — named pipeline (mutually exclusive with yaml)',
-      yaml: 'string — full YAML descriptor (mutually exclusive with pipeline)',
-      org: 'string?', repo: 'string?', env: 'string?',
-    },
+      'Execute a named built-in pipeline from ~/.da/pipelines/ by name. ' +
+      'For custom agent-authored YAML, use POST /v1/pipeline/custom ($0.25). ' +
+      'Steps with requires_approval are rejected (no interactive stdin via HTTP).',
+    body: { pipeline: 'string (pipeline name)', org: 'string?', repo: 'string?', env: 'string?' },
   },
   {
     route: 'POST /v1/pipeline/custom',
     price: '$0.25',
-    description: 'Alias for POST /v1/pipeline/run with { yaml }. Accepts { yaml } directly.',
-    body: { yaml: 'string', org: 'string?', repo: 'string?', env: 'string?' },
-    alias: true,
+    description:
+      'Submit a custom agent-authored YAML pipeline descriptor — the highest-value ' +
+      'capability. Agents compose any sequence of DA operations with dependencies, ' +
+      'parallelism, and timeouts. Steps with requires_approval are rejected ' +
+      '(no interactive stdin via HTTP).',
+    body: { yaml: 'string (full pipeline YAML)', org: 'string?', repo: 'string?', env: 'string?' },
   },
 ];
 

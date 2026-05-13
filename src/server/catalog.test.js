@@ -42,14 +42,24 @@ test('middleware config and endpoints map have identical route sets', () => {
   assert.deepEqual(middlewareRoutes, endpointRoutes);
 });
 
-test('pipeline/run is the highest-priced route', () => {
+test('pipeline/custom is the highest-priced route', () => {
   const parse = (s) => parseFloat(s.replace('$', ''));
-  const pipelineEntry = ROUTE_CATALOG.find((e) => e.route === 'POST /v1/pipeline/run');
-  const pipelinePrice = parse(pipelineEntry.price);
+  const customEntry = ROUTE_CATALOG.find((e) => e.route === 'POST /v1/pipeline/custom');
+  const customPrice = parse(customEntry.price);
   for (const { route, price } of ROUTE_CATALOG) {
     assert.ok(
-      pipelinePrice >= parse(price),
-      `pipeline/run ($${pipelinePrice}) should be >= ${route} ($${parse(price)})`
+      customPrice >= parse(price),
+      `pipeline/custom ($${customPrice}) should be >= ${route} ($${parse(price)})`
     );
   }
+});
+
+test('pipeline/custom is priced higher than pipeline/run', () => {
+  const parse = (s) => parseFloat(s.replace('$', ''));
+  const runEntry = ROUTE_CATALOG.find((e) => e.route === 'POST /v1/pipeline/run');
+  const customEntry = ROUTE_CATALOG.find((e) => e.route === 'POST /v1/pipeline/custom');
+  assert.ok(
+    parse(customEntry.price) > parse(runEntry.price),
+    `custom (${customEntry.price}) must exceed named run (${runEntry.price})`
+  );
 });

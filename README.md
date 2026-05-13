@@ -981,8 +981,8 @@ Without `X402_WALLET_ADDRESS`, the server binds to `127.0.0.1` only and payment 
 | `POST /v1/stardust/extract` | $0.05 | Extract brand context |
 | `POST /v1/stardust/direct` | $0.07 | AI redesign direction |
 | `POST /v1/stardust/migrate` | $0.05 | Migrate to new design |
-| **`POST /v1/pipeline/run`** | **$0.25** | **Named or custom YAML pipeline** |
-| `POST /v1/pipeline/custom` | $0.25 | Alias for `/run` with `{ yaml }` |
+| `POST /v1/pipeline/run` | $0.15 | Run a named pipeline from `~/.da/pipelines/` |
+| **`POST /v1/pipeline/custom`** | **$0.25** | **Agent-authored YAML pipeline — premium tier** |
 
 Discovery endpoints (`/`, `/.well-known/x402`, `/v1/health`) are always free.
 

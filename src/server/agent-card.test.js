@@ -40,16 +40,25 @@ test('agent card endpoints match catalog exactly', () => {
   assert.equal(Object.keys(card.endpoints).length, ROUTE_CATALOG.length);
 });
 
-test('pipeline endpoints are the highest-priced tier', () => {
+test('pipeline/custom is the highest-priced endpoint', () => {
   const card = agentCard(BASE, OPTS);
   const parse = (s) => parseFloat(s.replace('$', ''));
-  const pipelinePrice = parse(card.endpoints['POST /v1/pipeline/run'].price);
+  const customPrice = parse(card.endpoints['POST /v1/pipeline/custom'].price);
   for (const [route, ep] of Object.entries(card.endpoints)) {
     assert.ok(
-      pipelinePrice >= parse(ep.price),
-      `pipeline ($${pipelinePrice}) should be >= ${route} ($${parse(ep.price)})`
+      customPrice >= parse(ep.price),
+      `pipeline/custom ($${customPrice}) should be >= ${route} ($${parse(ep.price)})`
     );
   }
+});
+
+test('pipeline/custom is priced higher than pipeline/run', () => {
+  const card = agentCard(BASE, OPTS);
+  const parse = (s) => parseFloat(s.replace('$', ''));
+  assert.ok(
+    parse(card.endpoints['POST /v1/pipeline/custom'].price) >
+    parse(card.endpoints['POST /v1/pipeline/run'].price)
+  );
 });
 
 test('service includes custom-yaml-pipeline-execution skill', () => {
