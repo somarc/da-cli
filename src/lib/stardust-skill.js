@@ -83,16 +83,34 @@ export async function loadReferenceFile(relPath) {
   } catch { return null; }
 }
 
+// Returns true when the resolved skill path lives under the user's home directory.
+// Exported for unit testing.
+export function isGlobalSkill(skillPath, home = process.env.HOME || process.env.USERPROFILE || '') {
+  return !!skillPath && !!home && skillPath.startsWith(home);
+}
+
 // Spawn upskill to install/update from canonical source.
-// Returns exit code (0 = success, non-zero = failure, 'ENOENT' = not installed).
+// Detects whether the skill is globally installed and passes -g accordingly.
+// Tries both `upskill` and `gh upskill` to match the skills.js runner.
+// Returns exit code (0 = success, non-zero = failure, 'ENOENT' = neither found).
 export async function runUpskillUpdate() {
   const { spawn } = await import('node:child_process');
-  const args = [STARDUST_REPO, '--path', STARDUST_PATH, '--force'];
-  return new Promise((resolve) => {
-    const proc = spawn('upskill', args, { stdio: 'inherit' });
-    proc.on('error', (err) => resolve(err.code === 'ENOENT' ? 'ENOENT' : 'ERROR'));
-    proc.on('close', resolve);
-  });
+  const skillPath = await getSkillPath();
+  const isGlobal = isGlobalSkill(skillPath);
+  const args = [STARDUST_REPO, '--path', STARDUST_PATH, '--force', ...(isGlobal ? ['-g'] : [])];
+
+  const candidates = ['upskill', 'gh upskill'];
+  for (const cmd of candidates) {
+    const [bin, ...rest] = cmd.split(' ');
+    const code = await new Promise((resolve) => {
+      const proc = spawn(bin, [...rest, ...args], { stdio: 'inherit' });
+      proc.on('error', (err) => resolve(err.code === 'ENOENT' ? 'ENOENT' : 'ERROR'));
+      proc.on('close', resolve);
+    });
+    if (code === 'ENOENT' || code === 'ERROR') continue;
+    return code;
+  }
+  return 'ENOENT';
 }
 
 // Exported for testing — pure semver comparison.

@@ -28,8 +28,8 @@ describe('normalizeHtmlPath', () => {
     assert.equal(normalizeHtmlPath('/image.png', 'image.png'), '/image.png');
   });
 
-  test('handles root path without extension', () => {
-    assert.equal(normalizeHtmlPath('/'), '/.html');
+  test('handles root path — maps to /index.html', () => {
+    assert.equal(normalizeHtmlPath('/'), '/index.html');
   });
 });
 

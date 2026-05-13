@@ -188,6 +188,7 @@ export function makeContentCommand() {
 // EDS preview pipeline reads only the .html version — extensionless writes are silently ignored.
 // When the local file is HTML and the DA path has no extension, append .html.
 export function normalizeHtmlPath(daPath, localFile = '') {
+  if (daPath === '/') return '/index.html';
   const hasExt = /\.[^/]+$/.test(daPath.replace(/\/$/, ''));
   if (!hasExt && (localFile === '' || /\.html?$/i.test(localFile))) {
     return `${daPath}.html`;
