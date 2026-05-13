@@ -939,6 +939,106 @@ The route is served from the code repo, not DA. Deleting the DA source won't rem
 
 ---
 
+## HTTP API server (`da-serve`)
+
+`da-serve` exposes the CLI as an x402-payable HTTP API designed for agentic callers. Each route is gated by a USDC micropayment on Base. The **highest-value capability** is submitting a custom YAML pipeline — agents can pay to run any sequence of DA operations they compose themselves.
+
+### Quick start
+
+```bash
+# 1. Authenticate the CLI first (server inherits the token)
+da auth login
+
+# 2. Start the server (loopback-only by default)
+X402_WALLET_ADDRESS=0xYourWallet npm run serve
+
+# 3. Discover the agent card
+curl http://localhost:3402/.well-known/x402
+```
+
+Without `X402_WALLET_ADDRESS`, the server binds to `127.0.0.1` only and payment gating is disabled (useful for local dev). Binding to a non-loopback address without a wallet address is refused at startup.
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `X402_WALLET_ADDRESS` | — | Wallet address that receives payments (enables x402 gating) |
+| `X402_NETWORK` | `base` | EVM network for payment settlement |
+| `X402_FACILITATOR_URL` | `https://x402.org/facilitator` | x402 facilitator endpoint |
+| `PORT` | `3402` | Server port |
+| `HOST` | `127.0.0.1` | Bind address (non-loopback requires `X402_WALLET_ADDRESS`) |
+
+### Pricing tiers
+
+| Route | Price (USDC) | Description |
+|---|---|---|
+| `POST /v1/content/list` | $0.001 | List DA documents |
+| `POST /v1/content/get` | $0.001 | Fetch a document |
+| `POST /v1/content/put` | $0.002 | Write a document |
+| `POST /v1/preview` | $0.04 | Trigger Helix preview |
+| `POST /v1/publish` | $0.04 | Promote to aem.live CDN |
+| `POST /v1/deploy` | $0.06 | Preview + publish |
+| `POST /v1/stardust/extract` | $0.05 | Extract brand context |
+| `POST /v1/stardust/direct` | $0.07 | AI redesign direction |
+| `POST /v1/stardust/migrate` | $0.05 | Migrate to new design |
+| **`POST /v1/pipeline/run`** | **$0.25** | **Named or custom YAML pipeline** |
+| `POST /v1/pipeline/custom` | $0.25 | Alias for `/run` with `{ yaml }` |
+
+Discovery endpoints (`/`, `/.well-known/x402`, `/v1/health`) are always free.
+
+### Running a named pipeline
+
+Store YAML pipeline files in `~/.da/pipelines/`. Pass the filename (without extension) as `pipeline`:
+
+```bash
+curl -X POST http://localhost:3402/v1/pipeline/run \
+  -H 'Content-Type: application/json' \
+  -H 'X-Payment: <payment-proof>' \
+  -d '{ "pipeline": "my-deploy", "org": "acme", "repo": "site" }'
+```
+
+### Running a custom YAML pipeline (highest-value)
+
+Agents can submit any valid da-cli pipeline YAML descriptor inline. Steps run in dependency order with parallelism across batches. Steps with `requires_approval: true` are rejected at the API boundary (interactive stdin is not available in the HTTP context).
+
+```bash
+curl -X POST http://localhost:3402/v1/pipeline/run \
+  -H 'Content-Type: application/json' \
+  -H 'X-Payment: <payment-proof>' \
+  -d '{
+    "org": "acme",
+    "repo": "site",
+    "yaml": "pipeline:\n  name: staged-deploy\n  steps:\n    - id: preview\n      command: preview page /index\n    - id: publish\n      command: publish page /index\n      depends_on: [preview]"
+  }'
+```
+
+A pipeline step example with full options:
+
+```yaml
+pipeline:
+  name: staged-deploy
+  context:
+    org: acme
+    repo: site
+  steps:
+    - id: preview
+      command: preview page /index
+    - id: audit
+      command: audit semantics /index
+      depends_on: [preview]
+    - id: publish
+      command: publish page /index
+      depends_on: [audit]
+      continue_on_error: false
+      timeout: 30s
+```
+
+### ERC-8004 agent card
+
+The server exposes a standards-compliant ERC-8004 agent card at `/.well-known/x402`. To register on-chain, mint an agent NFT pointing to this URL as the `agentURI` using the [ERC-8004 Identity Registry](https://eips.ethereum.org/EIPS/eip-8004).
+
+---
+
 ## Development
 
 ```bash

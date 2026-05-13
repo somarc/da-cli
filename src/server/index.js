@@ -1,7 +1,15 @@
+import { readFileSync, readFile as readFileCb } from 'node:fs';
+import { promisify } from 'node:util';
 import express from 'express';
 import { paymentMiddleware } from 'x402-express';
-import { buildFlags, runDaCommand, withTempFile, resolvePipelineName } from './runner.js';
+import { ROUTE_CATALOG, toMiddlewareConfig } from './catalog.js';
+import { buildFlags, hasApprovalGates, runDaCommand, withTempFile, resolvePipelineName } from './runner.js';
 import { agentCard } from './agent-card.js';
+
+const readFile = promisify(readFileCb);
+const { version: PKG_VERSION } = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url))
+);
 
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || 'https://x402.org/facilitator';
 const NETWORK = process.env.X402_NETWORK || 'base';
@@ -10,21 +18,25 @@ export function createServer({ walletAddress } = {}) {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
 
+  const addr = walletAddress ?? process.env.X402_WALLET_ADDRESS;
+  const paymentEnabled = !!addr;
+
   // ── Discovery endpoints (free — registered before payment middleware) ────────
   app.get('/', (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({
       name: '@somarc/da-cli API',
-      version: '0.1.0',
+      version: PKG_VERSION,
       docs: 'https://main--da-cli-eds--somarc.aem.live/commands',
       agentCard: `${baseUrl}/.well-known/x402`,
       health: `${baseUrl}/v1/health`,
+      paymentEnabled,
     });
   });
 
   app.get('/.well-known/x402', (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json(agentCard(baseUrl));
+    res.json(agentCard(baseUrl, { version: PKG_VERSION, paymentEnabled }));
   });
 
   app.get('/v1/health', (req, res) =>
@@ -32,24 +44,11 @@ export function createServer({ walletAddress } = {}) {
   );
 
   // ── x402 payment middleware (gates all routes registered after this) ─────────
-  const addr = walletAddress ?? process.env.X402_WALLET_ADDRESS;
-  if (addr) {
+  if (paymentEnabled) {
     app.use(
       paymentMiddleware(
         addr,
-        {
-          'POST /v1/content/list':     { price: '$0.001', network: NETWORK },
-          'POST /v1/content/get':      { price: '$0.001', network: NETWORK },
-          'POST /v1/content/put':      { price: '$0.002', network: NETWORK },
-          'POST /v1/preview':          { price: '$0.04',  network: NETWORK },
-          'POST /v1/publish':          { price: '$0.04',  network: NETWORK },
-          'POST /v1/deploy':           { price: '$0.06',  network: NETWORK },
-          'POST /v1/stardust/extract': { price: '$0.05',  network: NETWORK },
-          'POST /v1/stardust/direct':  { price: '$0.07',  network: NETWORK },
-          'POST /v1/stardust/migrate': { price: '$0.05',  network: NETWORK },
-          'POST /v1/pipeline/run':     { price: '$0.15',  network: NETWORK },
-          'POST /v1/pipeline/custom':  { price: '$0.25',  network: NETWORK },
-        },
+        toMiddlewareConfig(ROUTE_CATALOG, NETWORK),
         { url: FACILITATOR_URL }
       )
     );
@@ -125,26 +124,62 @@ export function createServer({ walletAddress } = {}) {
   });
 
   // ── Pipelines ────────────────────────────────────────────────────────────────
+  // Unified handler: accepts { pipeline } for named or { yaml } for custom YAML.
+  // Both resolve to the same execution path; the distinction only matters for
+  // discovery / documentation purposes (both are priced at $0.25).
   app.post('/v1/pipeline/run', async (req, res) => {
-    const { pipeline: pipelineName, ...body } = req.body ?? {};
-    if (!pipelineName) return res.status(400).json({ error: 'pipeline name required' });
-    const pipelineFile = await resolvePipelineName(pipelineName);
-    if (!pipelineFile) {
-      return res.status(404).json({
-        error: `Pipeline '${pipelineName}' not found in ~/.da/pipelines/`,
-        hint: 'Use POST /v1/pipeline/custom to submit a full YAML pipeline body.',
+    const { pipeline: pipelineName, yaml, ...body } = req.body ?? {};
+
+    if (!pipelineName && !yaml) {
+      return res.status(400).json({
+        error: 'Either pipeline (named) or yaml (custom YAML) is required',
       });
     }
-    const result = await runDaCommand(['pipeline', 'run', pipelineFile], buildFlags(body));
+
+    let yamlContent;
+    if (yaml) {
+      yamlContent = yaml;
+    } else {
+      const pipelineFile = await resolvePipelineName(pipelineName);
+      if (!pipelineFile) {
+        return res.status(404).json({
+          error: `Pipeline '${pipelineName}' not found in ~/.da/pipelines/`,
+          hint: 'Provide yaml field to submit a custom YAML pipeline instead.',
+        });
+      }
+      try {
+        yamlContent = await readFile(pipelineFile, 'utf8');
+      } catch {
+        return res.status(500).json({ error: 'Failed to read named pipeline file' });
+      }
+    }
+
+    if (hasApprovalGates(yamlContent)) {
+      return res.status(422).json({
+        error: 'Pipeline contains requires_approval steps — cannot execute via HTTP (stdin is detached)',
+        hint: 'Remove requires_approval from pipeline steps to run via the API.',
+      });
+    }
+
+    const result = await withTempFile(yamlContent, '.yaml', (tmpPath) =>
+      runDaCommand(['pipeline', 'run', tmpPath], buildFlags(body))
+    );
     res.status(result.ok ? 200 : 500).json(result);
   });
 
+  // Compat alias — delegates entirely to /v1/pipeline/run logic with { yaml }.
   app.post('/v1/pipeline/custom', async (req, res) => {
     const { yaml, ...body } = req.body ?? {};
     if (!yaml) {
       return res.status(400).json({
         error: 'yaml required',
-        hint: 'Submit your full pipeline YAML descriptor in the yaml field.',
+        hint: 'Use POST /v1/pipeline/run with { yaml } field — same endpoint, same price.',
+      });
+    }
+    if (hasApprovalGates(yaml)) {
+      return res.status(422).json({
+        error: 'Pipeline contains requires_approval steps — cannot execute via HTTP (stdin is detached)',
+        hint: 'Remove requires_approval from pipeline steps to run via the API.',
       });
     }
     const result = await withTempFile(yaml, '.yaml', (tmpPath) =>

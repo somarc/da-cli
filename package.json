@@ -35,6 +35,7 @@
     "src/lib/stardust-state.js",
     "src/server/index.js",
     "src/server/agent-card.js",
+    "src/server/catalog.js",
     "src/server/runner.js",
     "README.md",
     "LICENSE"

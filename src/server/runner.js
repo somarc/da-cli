@@ -5,6 +5,7 @@ import { tmpdir, homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { access } from 'node:fs/promises';
+import { load as parseYaml } from 'js-yaml';
 
 const __filename = fileURLToPath(import.meta.url);
 const BIN = join(dirname(__filename), '../../bin/da.js');
@@ -18,6 +19,19 @@ export function buildFlags(body) {
   if (body.repo) flags.push('--repo', body.repo);
   if (body.env)  flags.push('--env',  body.env);
   return flags;
+}
+
+// Returns true if any pipeline step has requires_approval: true.
+// stdin is detached in the HTTP runner, so interactive approval gates cannot
+// complete — callers must reject such pipelines before spawning.
+export function hasApprovalGates(yamlContent) {
+  try {
+    const doc = parseYaml(yamlContent);
+    const steps = (doc?.pipeline ?? doc)?.steps ?? [];
+    return steps.some((s) => s?.requires_approval === true);
+  } catch {
+    return false;
+  }
 }
 
 // Spawn the da CLI binary with the given subcommand args + flags.
