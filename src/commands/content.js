@@ -44,6 +44,11 @@ export function makeContentCommand() {
     .description('Fetch source document to stdout or --output <file>')
     .option('-o, --output <file>', 'Write content to file instead of stdout')
     .action(async (path, opts) => {
+      const normalizedPath = normalizeHtmlPath(path);
+      if (normalizedPath !== path) {
+        verbose(`Path normalized: ${path} → ${normalizedPath} (EDS reads .html)`);
+        path = normalizedPath;
+      }
       const client = await createClient();
       try {
         const res = await client.sourceGet(path);
@@ -72,6 +77,12 @@ export function makeContentCommand() {
       } catch (err) {
         console.error(`Cannot read ${file}: ${err.message}`);
         process.exit(1);
+      }
+
+      const normalizedPath = normalizeHtmlPath(path, file);
+      if (normalizedPath !== path) {
+        info(`Note: path normalized to ${normalizedPath} — EDS reads .html; extensionless paths are skipped by the content pipeline`);
+        path = normalizedPath;
       }
 
       warnIfFragment(newContent, path);
@@ -170,6 +181,18 @@ export function makeContentCommand() {
     });
 
   return content;
+}
+
+// Exported for testing — pure path normalization with no side effects.
+// DA stores both extensionless (/index) and .html (/index.html) as separate docs.
+// EDS preview pipeline reads only the .html version — extensionless writes are silently ignored.
+// When the local file is HTML and the DA path has no extension, append .html.
+export function normalizeHtmlPath(daPath, localFile = '') {
+  const hasExt = /\.[^/]+$/.test(daPath.replace(/\/$/, ''));
+  if (!hasExt && (localFile === '' || /\.html?$/i.test(localFile))) {
+    return `${daPath}.html`;
+  }
+  return daPath;
 }
 
 // Exported for testing — pure detection with no side effects.

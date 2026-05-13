@@ -1,6 +1,37 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { fragmentDiagnostic } from './content.js';
+import { fragmentDiagnostic, normalizeHtmlPath } from './content.js';
+
+describe('normalizeHtmlPath', () => {
+  test('appends .html when path has no extension and local file is .html', () => {
+    assert.equal(normalizeHtmlPath('/index', 'index.html'), '/index.html');
+    assert.equal(normalizeHtmlPath('/lenses/runtime-topology', 'runtime-topology.html'), '/lenses/runtime-topology.html');
+    assert.equal(normalizeHtmlPath('/nav', 'nav.html'), '/nav.html');
+  });
+
+  test('appends .html when path has no extension and no local file provided (get case)', () => {
+    assert.equal(normalizeHtmlPath('/index'), '/index.html');
+    assert.equal(normalizeHtmlPath('/nav'), '/nav.html');
+  });
+
+  test('leaves path alone when it already has .html extension', () => {
+    assert.equal(normalizeHtmlPath('/index.html', 'index.html'), '/index.html');
+  });
+
+  test('leaves path alone when local file is not HTML', () => {
+    assert.equal(normalizeHtmlPath('/config', 'config.json'), '/config');
+    assert.equal(normalizeHtmlPath('/styles', 'styles.css'), '/styles');
+  });
+
+  test('leaves path alone when it has any other extension', () => {
+    assert.equal(normalizeHtmlPath('/data.json'), '/data.json');
+    assert.equal(normalizeHtmlPath('/image.png', 'image.png'), '/image.png');
+  });
+
+  test('handles root path without extension', () => {
+    assert.equal(normalizeHtmlPath('/'), '/.html');
+  });
+});
 
 describe('fragmentDiagnostic', () => {
   test('returns null for non-HTML paths', () => {
