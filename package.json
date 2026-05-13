@@ -33,15 +33,20 @@
     "src/lib/paths.js",
     "src/lib/stardust-skill.js",
     "src/lib/stardust-state.js",
+    "src/server/index.js",
+    "src/server/agent-card.js",
+    "src/server/runner.js",
     "README.md",
     "LICENSE"
   ],
   "bin": {
-    "da": "bin/da.js"
+    "da": "bin/da.js",
+    "da-serve": "bin/da-serve.js"
   },
   "exports": "./src/index.js",
   "scripts": {
     "test": "node --test src/**/*.test.js",
+    "serve": "node bin/da-serve.js",
     "prepublishOnly": "npm test"
   },
   "publishConfig": {
@@ -65,6 +70,8 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "js-yaml": "^4.1.1"
+    "express": "^4.19.0",
+    "js-yaml": "^4.1.1",
+    "x402-express": "^0.7.3"
   }
 }
