@@ -1,25 +1,87 @@
 import { Command } from 'commander';
 import { print, info } from '../lib/output.js';
 import { freshState, loadState, setPageMigrated, finalizeGlobalState } from '../lib/stardust-state.js';
+import {
+  STARDUST_CANONICAL,
+  getSkillPath,
+  loadLocalTile,
+  checkStaleness,
+  loadPaletteLibrary,
+  runUpskillUpdate,
+} from '../lib/stardust-skill.js';
+import { normalizeHtmlPath } from './content.js';
 
 // Stardust redesign pipeline for EDS sites.
+// Canonical upstream skill: https://github.com/adobe/skills/tree/main/plugins/stardust
+// Install:  da skills add stardust
+// Update:   da stardust update
 // Four phases: extract → direct → prototype → migrate
-// State stored in .stardust/state.json relative to CWD.
-// Design taste sourced from:
-//   - adobe/skills/plugins/stardust (4-phase methodology)
-//   - ai-ecoverse/snowflake (EDS template target)
-//   - pbakaus/impeccable (anti-pattern detection + design laws)
 
 export function makeStardustCommand() {
   const stardust = new Command('stardust')
     .description('4-phase EDS site redesign pipeline — extract → direct → prototype → migrate')
     .action(async () => {
-      // No subcommand: show state report
       const state = await loadState();
+      const tile = await loadLocalTile();
       if (process.stdout.isTTY) {
-        printStateReport(state);
+        printStateReport(state, tile);
       } else {
         print(state);
+      }
+    });
+
+  // ─── version ───────────────────────────────────────────────────────────────
+  stardust
+    .command('version')
+    .description('Show local vs upstream Stardust skill version')
+    .action(async () => {
+      info('Checking Stardust skill version…');
+      const { localVersion, remoteVersion, installed, stale, upToDate } = await checkStaleness();
+
+      if (!installed) {
+        console.log(`Local:   not installed`);
+        console.log(`Remote:  ${remoteVersion ?? '(unavailable)'}`);
+        console.log(`\nInstall: da skills add stardust`);
+        console.log(`Source:  ${STARDUST_CANONICAL}`);
+        return;
+      }
+
+      console.log(`Local:   v${localVersion}`);
+      console.log(`Remote:  ${remoteVersion ? `v${remoteVersion}` : '(unavailable)'}`);
+      if (stale) {
+        console.log(`Status:  STALE — run \`da stardust update\` to sync`);
+      } else if (upToDate) {
+        console.log(`Status:  up to date`);
+      } else {
+        console.log(`Status:  unknown (could not reach upstream)`);
+      }
+      console.log(`Source:  ${STARDUST_CANONICAL}`);
+    });
+
+  // ─── update ────────────────────────────────────────────────────────────────
+  stardust
+    .command('update')
+    .description(`Sync Stardust skill from ${STARDUST_CANONICAL}`)
+    .action(async () => {
+      const before = await loadLocalTile();
+      info(`Fetching latest Stardust skill from adobe/skills…`);
+      const code = await runUpskillUpdate();
+      if (code === 'ENOENT') {
+        console.error('upskill CLI not found. Run: da skills bootstrap');
+        console.error('Then retry: da stardust update');
+        process.exit(1);
+      }
+      if (code !== 0) {
+        console.error(`upskill exited with code ${code}`);
+        process.exit(code);
+      }
+      const after = await loadLocalTile();
+      const was = before?.version ?? 'none';
+      const now = after?.version ?? '?';
+      if (was === now) {
+        info(`Stardust already at v${now} — no changes.`);
+      } else {
+        info(`Stardust updated: v${was} → v${now}`);
       }
     });
 
@@ -127,11 +189,16 @@ export function makeStardustCommand() {
       info(`  density:  ${dimensions.density}`);
       info(`  expressive axis: ${dimensions.expressiveAxis}`);
 
-      // Select palette
+      // Select palette — prefer installed 127-palette library, fall back to inline 8
+      const paletteLib = await loadPaletteLibrary();
       const palette = opts.palette
-        ? { name: opts.palette }
-        : selectPalette(intent, dimensions);
-      info(`  palette:  ${palette.name}`);
+        ? (paletteLib ? findPaletteByName(paletteLib, opts.palette) ?? { name: opts.palette } : { name: opts.palette })
+        : (paletteLib ? selectPaletteFromLibrary(paletteLib, intent, dimensions) : selectPalette(intent, dimensions));
+      if (paletteLib) {
+        info(`  palette:  ${palette.name} (from installed skill — ${Object.keys(paletteLib).length ?? '?'} palettes available)`);
+      } else {
+        info(`  palette:  ${palette.name} (inline fallback — install skill for full 127-palette library)`);
+      }
 
       // Write direction.md (reasoning trace)
       const { writeFile } = await import('node:fs/promises');
@@ -140,10 +207,16 @@ export function makeStardustCommand() {
       // Generate target PRODUCT.md and DESIGN.md at project root
       await writeFile('PRODUCT.md', generateTargetProductMd(intent, dimensions), 'utf8');
       await writeFile('DESIGN.md', generateTargetDesignMd(dimensions, palette), 'utf8');
-      await writeJson('DESIGN.json', { intent, dimensions, palette, generatedAt: new Date().toISOString() });
+      const tile = await loadLocalTile();
+      await writeJson('DESIGN.json', {
+        intent, dimensions, palette,
+        skillVersion: tile?.version ?? null,
+        generatedAt: new Date().toISOString(),
+      });
 
       // Update state
       state.phase = 'directed';
+      state.skillVersion = tile?.version ?? null;
       state.intent = intent;
       state.dimensions = dimensions;
       state.palette = palette;
@@ -269,7 +342,7 @@ export function makeStardustCommand() {
         // Push to DA — only advance state on success
         let pushed = false;
         try {
-          await client.sourcePut(pagePath.endsWith('.html') ? pagePath : `${pagePath}.html`, migratedHtml);
+          await client.sourcePut(normalizeHtmlPath(pagePath), migratedHtml);
           info(`  pushed: ${pagePath} → DA`);
 
           // Trigger preview
@@ -310,7 +383,7 @@ export function makeStardustCommand() {
 // freshState / loadState / setPageMigrated / finalizeGlobalState live in
 // src/lib/stardust-state.js and are imported at the top of this file.
 
-function printStateReport(state) {
+function printStateReport(state, tile = null) {
   const phase = state.phase ?? 'fresh';
   const phases = ['fresh', 'extracted', 'directed', 'prototyped', 'migrated'];
   const step = phases.indexOf(phase);
@@ -318,12 +391,23 @@ function printStateReport(state) {
   console.log('');
   console.log(`Progress: ${phases.map((p, i) => i <= step ? `[${p}]` : ` ${p} `).join(' → ')}`);
   if (state.intent) console.log(`\nIntent:  "${state.intent}"`);
+  if (state.skillVersion) console.log(`Skill:   v${state.skillVersion}`);
   if (state.pageCount) console.log(`Pages:   ${state.pageCount}`);
   if (state.pages?.length) {
     console.log('\nPage status:');
     for (const p of state.pages) console.log(`  ${p.status.padEnd(12)} ${p.path}`);
   }
   console.log('');
+
+  // Skill install status
+  if (tile) {
+    console.log(`Skill:   v${tile.version} installed — run \`da stardust version\` to check for updates`);
+  } else {
+    console.log(`Skill:   not installed — run \`da skills add stardust\` for full palette library + divergence toolkit`);
+    console.log(`         ${STARDUST_CANONICAL}`);
+  }
+  console.log('');
+
   const next = {
     fresh:      'da stardust extract [url]',
     extracted:  'da stardust direct "<intent phrase>"',
@@ -442,7 +526,35 @@ function resolveDimensions(phrase, opts) {
   return { register, tone, density, expressiveAxis, distinctiveness };
 }
 
-// Simplified palette selection — in practice would reference the 127-palette library
+// Find a palette by exact name in the installed library (object keyed by name or array with name field)
+function findPaletteByName(lib, name) {
+  if (Array.isArray(lib)) return lib.find((p) => p.name === name) ?? null;
+  return lib[name] ? { name, ...lib[name] } : null;
+}
+
+// Select best-match palette from the installed 127-palette library.
+// The library is keyed by name; pick the first whose metadata matches intent keywords.
+function selectPaletteFromLibrary(lib, intent, dimensions) {
+  const entries = Array.isArray(lib)
+    ? lib
+    : Object.entries(lib).map(([name, meta]) => ({ name, ...meta }));
+
+  const p = intent.toLowerCase();
+  // Try keyword match on palette name or hue/energy metadata
+  const match = entries.find((e) => {
+    const searchable = `${e.name} ${e.hue ?? ''} ${e.energy ?? ''} ${(e.tags ?? []).join(' ')}`.toLowerCase();
+    return searchable.split(/\s+/).some((token) => p.includes(token) && token.length > 3);
+  });
+  if (match) return match;
+
+  // Fall back by dimension
+  if (dimensions.tone === 'playful') return entries.find((e) => /energe|citrus|pop|vivid/i.test(e.energy ?? '')) ?? entries[0];
+  if (dimensions.tone === 'serious') return entries.find((e) => /composed|slate|authority/i.test(`${e.name} ${e.energy ?? ''}`)) ?? entries[0];
+  if (dimensions.expressiveAxis === 'drenched') return entries.find((e) => /dramatic|bold|saturated/i.test(e.energy ?? '')) ?? entries[0];
+  return entries[Math.floor(entries.length / 2)] ?? entries[0]; // mid-library default
+}
+
+// Inline fallback (8 palettes) — used when skill is not installed
 function selectPalette(intent, dimensions) {
   const p = intent.toLowerCase();
   if (/ocean|sea|water|coastal/i.test(p)) return { name: 'ocean-depths', hue: 'blue', energy: 'calm' };
