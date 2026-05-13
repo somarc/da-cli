@@ -986,6 +986,8 @@ Without `X402_WALLET_ADDRESS`, the server binds to `127.0.0.1` only and payment 
 
 Discovery endpoints (`/`, `/.well-known/x402`, `/v1/health`) are always free.
 
+> **Design note:** x402 enforces prices at the route level, not the request-body level. Differentiating named-pipeline execution ($0.15) from custom-YAML execution ($0.25) therefore requires two distinct routes. Submitting `{ yaml }` to `/v1/pipeline/run` returns a `400` with an explicit redirect to `/v1/pipeline/custom`.
+
 ### Running a named pipeline
 
 Store YAML pipeline files in `~/.da/pipelines/`. Pass the filename (without extension) as `pipeline`:
