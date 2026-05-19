@@ -247,6 +247,7 @@ Preview every HTML source document under a DA prefix. This is the agent-friendly
 ```bash
 da preview tree / --commit
 da preview tree /docs --concurrency 10 --commit
+da preview tree / --verify --commit   # fail if any .plain.html is empty or unreachable
 ```
 
 ### `da preview status <path>`
@@ -287,6 +288,7 @@ Publish every HTML source document under a DA prefix to `*.aem.live`. Run `da pr
 ```bash
 da publish tree / --commit
 da publish tree /docs --concurrency 10 --commit
+da publish tree / --verify-live --commit   # fail if any canonical live URL is unreachable
 ```
 
 ### `da publish unpublish <path>`
@@ -350,6 +352,17 @@ da route classify /blog/post
 # { path: '/blog/post', ownership: 'contentbus', daSource: true, preview: 200, live: 200 }
 ```
 
+### `da route canonical <path>`
+
+Show the DA source path, canonical browser URL path, preview URL, live URL, and `.plain.html` URL for a route. This is intended for discovery and does not use the classification exit-code contract; use `da route classify` when a script must branch on ownership.
+
+```bash
+da route canonical /index.html
+# canonicalPath: /
+# previewUrl: https://main--my-site--my-org.aem.page/
+# liveUrl:    https://main--my-site--my-org.aem.live/
+```
+
 ### `da route audit`
 
 Classify every route under a path prefix.
@@ -368,6 +381,23 @@ da route clean /old-page               # dry-run: shows classification
 da route clean /old-page --commit      # delete source + flush preview
 da route clean /old-page --force --commit  # bypass ownership check
 ```
+
+---
+
+## Site
+
+Diagnose DA-backed EDS site registration, content, code-bus, preview, and live state.
+
+### `da site doctor [repo]`
+
+Run a compact health check for Sidekick registration, `contentSourceType`, code-bus visibility, shared DA docs, and key routes.
+
+```bash
+da site doctor my-site --org my-org
+da site doctor my-site --org my-org --deep --limit 100 --concurrency 10
+```
+
+Use `--deep` to sample HTML documents under the site root and summarize preview/live drift. If DA listing is unavailable, doctor reports that as a diagnostic row instead of aborting with a stack trace.
 
 ---
 

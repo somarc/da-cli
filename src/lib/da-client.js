@@ -273,6 +273,20 @@ export function buildPlainHtmlUrl({ org, repo, branch = 'main' }, path) {
   return `https://${branch}--${repo}--${org}.aem.page${norm(segment)}.plain.html`;
 }
 
+export function canonicalWebPath(path) {
+  const stripped = norm(path).replace(/\.html$/, '');
+  if (stripped === '/index') return '/';
+  return stripped.replace(/\/index$/, '/');
+}
+
+export function buildPreviewUrl({ org, repo, branch = 'main' }, path) {
+  return `https://${branch}--${repo}--${org}.aem.page${canonicalWebPath(path)}`;
+}
+
+export function buildLiveUrl({ org, repo, branch = 'main' }, path) {
+  return `https://${branch}--${repo}--${org}.aem.live${canonicalWebPath(path)}`;
+}
+
 // Static unauthenticated helper — used by `da design` and `da stardust` when no
 // auth token is available or needed (reads from public aem.page preview URLs).
 export async function fetchPlainHtml({ org, repo, branch = 'main' }, path) {

@@ -1,8 +1,9 @@
 import { Command } from 'commander';
-import { createClient, buildPlainHtmlUrl } from '../lib/da-client.js';
+import { createClient, buildPlainHtmlUrl, DaApiError } from '../lib/da-client.js';
 import { isEmptyContent } from './preview.js';
 import { classify } from './route.js';
 import { print, info } from '../lib/output.js';
+import { listContentPaths, runConcurrent } from '../lib/paths.js';
 
 // EDS site scaffolding — creates new sites using ai-ecoverse/snowflake as template.
 // Snowflake is the canonical EDS starter optimized for Stardust prototype conversion.
@@ -188,6 +189,9 @@ export function makeSiteCommand() {
     .description('Diagnose DA-backed EDS registration, content, code-bus, preview, and live state')
     .option('--org <org>', 'Org to check (default: configured org)')
     .option('--branch <branch>', 'Branch to check (default: main)')
+    .option('--deep', 'Classify HTML documents under the site root and summarize preview/live drift')
+    .option('--limit <n>', 'Max documents to classify with --deep', '50')
+    .option('--concurrency <n>', 'Max parallel route probes with --deep', '8')
     .action(async (repo, opts) => {
       const client = await createClient({
         ...(opts.org ? { org: opts.org } : {}),
@@ -239,9 +243,26 @@ export function makeSiteCommand() {
         routeRow('/footer', footerRoute),
       ];
 
+      const deep = opts.deep ? await deepRouteSummary(client, opts) : null;
+      if (deep) {
+        rows.push(
+          {
+            check: 'deep route sample',
+            status: deep.error || deep.failed > 0 || deep.previewMissing > 0 ? 'WARN' : 'ok',
+            detail: deep.error ?? `${deep.checked}/${deep.total} checked; previewMissing=${deep.previewMissing}; liveMissing=${deep.liveMissing}; failed=${deep.failed}`,
+          },
+        );
+      }
+
       print(rows);
 
-      const recommendations = doctorRecommendations({ sidekick, codeAsset, daDocs, routes: [rootRoute, navRoute, footerRoute] });
+      const recommendations = doctorRecommendations({
+        sidekick,
+        codeAsset,
+        daDocs,
+        routes: [rootRoute, navRoute, footerRoute],
+        deep,
+      });
       if (recommendations.length) {
         console.log('');
         console.log('Recommendations:');
@@ -284,14 +305,26 @@ async function checkSharedDocs(client) {
   const docs = ['/index.html', '/nav.html', '/footer.html'];
   const found = [];
   const missing = [];
+  const errors = [];
   await Promise.all(docs.map(async (path) => {
     try {
       await client.sourceGet(path);
       found.push(path);
-    } catch {
-      missing.push(path);
+    } catch (err) {
+      if (err instanceof DaApiError && err.status === 404) {
+        missing.push(path);
+      } else {
+        errors.push(`${path}: ${err.message}`);
+      }
     }
   }));
+  if (errors.length) {
+    return {
+      ok: false,
+      error: true,
+      detail: `could not probe: ${errors.sort().join('; ')}`,
+    };
+  }
   return {
     ok: missing.length === 0,
     detail: missing.length ? `missing: ${missing.sort().join(', ')}` : `found: ${found.sort().join(', ')}`,
@@ -306,7 +339,7 @@ function routeRow(path, verdict) {
   };
 }
 
-function doctorRecommendations({ sidekick, codeAsset, daDocs, routes }) {
+function doctorRecommendations({ sidekick, codeAsset, daDocs, routes, deep }) {
   const recs = [];
   if (!sidekick.ok) {
     recs.push('Sidekick registration is incomplete. Re-register the site before reseeding content; content uploads can succeed while preview/live still fail.');
@@ -317,7 +350,9 @@ function doctorRecommendations({ sidekick, codeAsset, daDocs, routes }) {
   if (!codeAsset.ok) {
     recs.push('Code-bus cannot see normal code assets. Confirm the AEM Sync GitHub App is installed and the repo was synced.');
   }
-  if (!daDocs.ok) {
+  if (daDocs.error) {
+    recs.push('DA source probing failed. Refresh DA auth with `da auth login --refresh` before deciding content is missing.');
+  } else if (!daDocs.ok) {
     recs.push('Create or restore /index.html, /nav.html, and /footer.html, then run `da preview tree / --commit`.');
   }
   if (routes.some((r) => r.ownership === 'orphan')) {
@@ -326,7 +361,47 @@ function doctorRecommendations({ sidekick, codeAsset, daDocs, routes }) {
   if (routes.some((r) => r.preview === 200 && r.live !== 200)) {
     recs.push('Preview is healthy but live is not current. Run `da publish tree / --commit` when ready.');
   }
+  if (deep?.previewMissing > 0) {
+    recs.push('Some deep routes are missing preview. Run `da preview tree / --verify --commit` and inspect failed rows.');
+  }
+  if (deep?.liveMissing > 0) {
+    recs.push('Some deep routes are missing live. Run `da publish tree / --verify-live --commit` when ready.');
+  }
   return recs;
+}
+
+async function deepRouteSummary(client, opts) {
+  const limit = Math.max(1, parseInt(opts.limit, 10) || 50);
+  const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 8);
+  let paths;
+  try {
+    paths = (await listContentPaths(client, '/', { ext: 'html' })).slice(0, limit);
+  } catch (err) {
+    return {
+      total: 0,
+      checked: 0,
+      failed: 1,
+      previewMissing: 0,
+      liveMissing: 0,
+      error: `could not list DA content: ${err.message}`,
+    };
+  }
+
+  const results = await runConcurrent(
+    paths.map((path) => () => classify(client, path).catch((err) => ({
+      path,
+      ownership: 'probe-failed',
+      error: err.message,
+    }))),
+    concurrency,
+  );
+  return {
+    total: paths.length,
+    checked: results.length,
+    failed: results.filter((r) => r.ownership === 'probe-failed').length,
+    previewMissing: results.filter((r) => r.preview !== 200).length,
+    liveMissing: results.filter((r) => r.live !== 200).length,
+  };
 }
 
 // ── Health check helpers ───────────────────────────────────────────────────────

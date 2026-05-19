@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createClient, DaApiError } from '../lib/da-client.js';
+import { buildLiveUrl, createClient, DaApiError } from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
 import { resolvePaths, runConcurrent } from '../lib/paths.js';
 
@@ -71,6 +71,7 @@ export function makePublishCommand() {
     .description('Publish every HTML source document under a DA prefix to live CDN — requires --commit')
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch')
+    .option('--verify-live', 'Fetch each canonical live URL after publish and report HTTP status')
     .action(async (prefix = '/', opts) => {
       const { guardWrite } = await import('../lib/mutation.js');
       const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
@@ -89,7 +90,9 @@ export function makePublishCommand() {
         paths.map((p) => async () => {
           try {
             const r = await client.helixLive(p);
-            return { path: p, url: r?.live?.url ?? '', status: 'ok' };
+            const row = { path: p, url: r?.live?.url ?? '', status: 'ok' };
+            if (opts.verifyLive) row.verify = await verifyLive(client, p);
+            return row;
           } catch (err) {
             return { path: p, url: '', status: `error: ${err.message}` };
           }
@@ -98,7 +101,7 @@ export function makePublishCommand() {
       );
 
       print(results);
-      if (results.some((r) => r.status !== 'ok')) process.exit(1);
+      if (results.some((r) => r.status !== 'ok' || (opts.verifyLive && !r.verify?.startsWith('ok:')))) process.exit(1);
     });
 
   // ─── unpublish ─────────────────────────────────────────────────────────────
@@ -120,6 +123,18 @@ export function makePublishCommand() {
     });
 
   return publish;
+}
+
+async function verifyLive(client, path) {
+  try {
+    const res = await fetch(buildLiveUrl(client, path), {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    return res.ok ? `ok: ${res.status}` : `fail: HTTP ${res.status}`;
+  } catch (err) {
+    return `fail: ${err.message}`;
+  }
 }
 
 function handleApiError(err, path) {
