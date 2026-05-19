@@ -65,6 +65,42 @@ export function makePublishCommand() {
       print(results);
     });
 
+  // ─── tree ──────────────────────────────────────────────────────────────────
+  publish
+    .command('tree [prefix]')
+    .description('Publish every HTML source document under a DA prefix to live CDN — requires --commit')
+    .option('--concurrency <n>', 'Max parallel requests', '5')
+    .option('--branch <branch>', 'Git branch')
+    .action(async (prefix = '/', opts) => {
+      const { guardWrite } = await import('../lib/mutation.js');
+      const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
+      const paths = (await resolvePaths(prefix)).filter((p) => /\.html$/i.test(p));
+
+      if (paths.length === 0) {
+        console.error('No paths found.');
+        process.exit(1);
+      }
+
+      if (!guardWrite(`Publish ${paths.length} HTML document(s) under ${prefix}`).proceed) return;
+
+      info(`Publishing ${paths.length} page(s) with concurrency ${concurrency}…`);
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+      const results = await runConcurrent(
+        paths.map((p) => async () => {
+          try {
+            const r = await client.helixLive(p);
+            return { path: p, url: r?.live?.url ?? '', status: 'ok' };
+          } catch (err) {
+            return { path: p, url: '', status: `error: ${err.message}` };
+          }
+        }),
+        concurrency,
+      );
+
+      print(results);
+      if (results.some((r) => r.status !== 'ok')) process.exit(1);
+    });
+
   // ─── unpublish ─────────────────────────────────────────────────────────────
   publish
     .command('unpublish <path>')

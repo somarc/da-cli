@@ -6,6 +6,7 @@ import { guardWrite, simpleDiff } from '../lib/mutation.js';
 import { resolveConfig } from '../lib/config.js';
 import { getToken } from '../lib/auth.js';
 import { DaApiError } from '../lib/da-client.js';
+import { listContentPaths } from '../lib/paths.js';
 
 export function makeContentCommand() {
   const content = new Command('content').description('CRUD operations on DA source documents');
@@ -33,6 +34,25 @@ export function makeContentCommand() {
             : '',
         }));
         print(rows);
+      } catch (err) {
+        handleApiError(err);
+      }
+    });
+
+  // ─── tree ─────────────────────────────────────────────────────────────────
+  content
+    .command('tree [prefix]')
+    .description('Recursively list source documents under a prefix; useful for bulk preview/publish inputs')
+    .option('--ext <ext>', 'Filter by extension, for example html')
+    .action(async (prefix = '/', opts) => {
+      const client = await createClient();
+      try {
+        const paths = await listContentPaths(client, prefix, { ext: opts.ext });
+        if (paths.length === 0) {
+          info('(empty)');
+          return;
+        }
+        print(paths.map((path) => ({ path })));
       } catch (err) {
         handleApiError(err);
       }
