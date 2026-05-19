@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { createClient, buildPlainHtmlUrl } from '../lib/da-client.js';
 import { isEmptyContent } from './preview.js';
+import { classify } from './route.js';
 import { print, info } from '../lib/output.js';
 
 // EDS site scaffolding — creates new sites using ai-ecoverse/snowflake as template.
@@ -181,7 +182,151 @@ export function makeSiteCommand() {
       }
     });
 
+  // ─── doctor ────────────────────────────────────────────────────────────────
+  site
+    .command('doctor [repo]')
+    .description('Diagnose DA-backed EDS registration, content, code-bus, preview, and live state')
+    .option('--org <org>', 'Org to check (default: configured org)')
+    .option('--branch <branch>', 'Branch to check (default: main)')
+    .action(async (repo, opts) => {
+      const client = await createClient({
+        ...(opts.org ? { org: opts.org } : {}),
+        ...(repo ? { repo } : {}),
+        ...(opts.branch ? { branch: opts.branch } : {}),
+      });
+
+      info(`Running site doctor for ${client.org}/${client.repo} (${client.branch})…`);
+
+      const [
+        sidekick,
+        codeAsset,
+        daDocs,
+        rootRoute,
+        navRoute,
+        footerRoute,
+      ] = await Promise.all([
+        checkSidekick(client),
+        checkCodePath(client, '/styles/styles.css'),
+        checkSharedDocs(client),
+        classify(client, '/index').catch((err) => ({ path: '/index', ownership: 'probe-failed', error: err.message })),
+        classify(client, '/nav').catch((err) => ({ path: '/nav', ownership: 'probe-failed', error: err.message })),
+        classify(client, '/footer').catch((err) => ({ path: '/footer', ownership: 'probe-failed', error: err.message })),
+      ]);
+
+      const rows = [
+        {
+          check: 'Sidekick registration',
+          status: sidekick.ok ? 'ok' : 'FAIL',
+          detail: sidekick.detail,
+        },
+        {
+          check: 'contentSourceType',
+          status: sidekick.config?.contentSourceType === 'markup' ? 'ok' : 'WARN',
+          detail: sidekick.config?.contentSourceType ?? 'missing',
+        },
+        {
+          check: 'code-bus styles.css',
+          status: codeAsset.ok ? 'ok' : 'WARN',
+          detail: codeAsset.detail,
+        },
+        {
+          check: 'DA shared docs',
+          status: daDocs.ok ? 'ok' : 'WARN',
+          detail: daDocs.detail,
+        },
+        routeRow('/index', rootRoute),
+        routeRow('/nav', navRoute),
+        routeRow('/footer', footerRoute),
+      ];
+
+      print(rows);
+
+      const recommendations = doctorRecommendations({ sidekick, codeAsset, daDocs, routes: [rootRoute, navRoute, footerRoute] });
+      if (recommendations.length) {
+        console.log('');
+        console.log('Recommendations:');
+        recommendations.forEach((rec) => console.log(`  - ${rec}`));
+      }
+    });
+
   return site;
+}
+
+async function checkSidekick(client) {
+  try {
+    const config = await client.helixSidekickConfig();
+    const required = ['previewHost', 'liveHost', 'contentSourceUrl', 'contentSourceType'];
+    const missing = required.filter((k) => !config?.[k]);
+    return {
+      ok: missing.length === 0,
+      config,
+      detail: missing.length === 0 ? `${config.previewHost} / ${config.liveHost}` : `missing: ${missing.join(', ')}`,
+    };
+  } catch (err) {
+    return { ok: false, config: null, detail: err.message };
+  }
+}
+
+async function checkCodePath(client, path) {
+  try {
+    const status = await client.helixCodeStatus(path);
+    const codeStatus = status?.code?.status;
+    return {
+      ok: codeStatus === 200,
+      detail: codeStatus ? `${codeStatus} ${status?.code?.sourceLocation ?? ''}`.trim() : 'missing code status',
+    };
+  } catch (err) {
+    return { ok: false, detail: err.message };
+  }
+}
+
+async function checkSharedDocs(client) {
+  const docs = ['/index.html', '/nav.html', '/footer.html'];
+  const found = [];
+  const missing = [];
+  await Promise.all(docs.map(async (path) => {
+    try {
+      await client.sourceGet(path);
+      found.push(path);
+    } catch {
+      missing.push(path);
+    }
+  }));
+  return {
+    ok: missing.length === 0,
+    detail: missing.length ? `missing: ${missing.sort().join(', ')}` : `found: ${found.sort().join(', ')}`,
+  };
+}
+
+function routeRow(path, verdict) {
+  return {
+    check: `route ${path}`,
+    status: verdict.ownership === 'contentbus' && verdict.preview === 200 ? 'ok' : 'WARN',
+    detail: `${verdict.ownership}; preview=${verdict.preview ?? 'n/a'} live=${verdict.live ?? 'n/a'} source=${verdict.sourceLocation ?? verdict.error ?? 'none'}`,
+  };
+}
+
+function doctorRecommendations({ sidekick, codeAsset, daDocs, routes }) {
+  const recs = [];
+  if (!sidekick.ok) {
+    recs.push('Sidekick registration is incomplete. Re-register the site before reseeding content; content uploads can succeed while preview/live still fail.');
+  }
+  if (sidekick.config && sidekick.config.contentSourceType !== 'markup') {
+    recs.push('For DA-backed HTML content, Sidekick config should include contentSourceType: "markup".');
+  }
+  if (!codeAsset.ok) {
+    recs.push('Code-bus cannot see normal code assets. Confirm the AEM Sync GitHub App is installed and the repo was synced.');
+  }
+  if (!daDocs.ok) {
+    recs.push('Create or restore /index.html, /nav.html, and /footer.html, then run `da preview tree / --commit`.');
+  }
+  if (routes.some((r) => r.ownership === 'orphan')) {
+    recs.push('One or more key routes are orphaned. Check the DA source path and preview the corresponding .html document.');
+  }
+  if (routes.some((r) => r.preview === 200 && r.live !== 200)) {
+    recs.push('Preview is healthy but live is not current. Run `da publish tree / --commit` when ready.');
+  }
+  return recs;
 }
 
 // ── Health check helpers ───────────────────────────────────────────────────────

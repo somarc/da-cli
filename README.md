@@ -147,6 +147,16 @@ da content list /
 da content list /blog
 ```
 
+### `da content tree [prefix]`
+
+Recursively list source documents under a prefix. This is useful when preparing an explicit path set for bulk preview or publish.
+
+```bash
+da content tree /
+da content tree / --ext html
+da content tree /blog --ext html --format json
+```
+
 ### `da content get <path>`
 
 Fetch a source document to stdout or a file.
@@ -230,6 +240,15 @@ da preview pages paths.txt              # file of newline-delimited paths
 da preview pages /blog --concurrency 10
 ```
 
+### `da preview tree [prefix]`
+
+Preview every HTML source document under a DA prefix. This is the agent-friendly path for full-site preview because it includes shared documents such as `/nav.html` and `/footer.html` when they exist.
+
+```bash
+da preview tree / --commit
+da preview tree /docs --concurrency 10 --commit
+```
+
 ### `da preview status <path>`
 
 Check Helix preview pipeline status for a path.
@@ -259,6 +278,15 @@ Batch publish — same source format as `da preview pages`.
 ```bash
 da publish pages /blog --commit
 da publish pages paths.txt --commit --concurrency 10
+```
+
+### `da publish tree [prefix]`
+
+Publish every HTML source document under a DA prefix to `*.aem.live`. Run `da preview tree` first.
+
+```bash
+da publish tree / --commit
+da publish tree /docs --concurrency 10 --commit
 ```
 
 ### `da publish unpublish <path>`
@@ -725,6 +753,25 @@ da site info
 da site info my-site --org my-org
 da site info my-site --org my-org --branch feature-branch
 ```
+
+### `da site doctor [repo]`
+
+Diagnose DA-backed EDS registration and delivery state. This command checks Sidekick registration, `contentSourceType`, code-bus visibility, shared DA documents, and route classification for `/index`, `/nav`, and `/footer`.
+
+Use this before reseeding content when preview/publish fails with vague 404s.
+
+```bash
+da site doctor
+da site doctor my-site --org my-org
+da site doctor my-site --org my-org --branch feature-branch
+```
+
+Common failure signals:
+
+- Sidekick registration missing `previewHost`, `liveHost`, or `contentSourceType`
+- DA content exists but key routes classify as `orphan`
+- Preview is healthy but live is stale
+- Code-bus cannot see normal repo assets
 
 ---
 

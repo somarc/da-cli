@@ -70,6 +70,16 @@ export function makePreviewCommand() {
       print(results);
     });
 
+  // ─── tree ──────────────────────────────────────────────────────────────────
+  preview
+    .command('tree [prefix]')
+    .description('Preview every HTML source document under a DA prefix, including nav/footer if present')
+    .option('--concurrency <n>', 'Max parallel requests', '5')
+    .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
+    .action(async (prefix = '/', opts) => {
+      await previewPathSet(prefix, { ...opts, htmlOnly: true });
+    });
+
   // ─── status ────────────────────────────────────────────────────────────────
   preview
     .command('status <path>')
@@ -86,6 +96,39 @@ export function makePreviewCommand() {
     });
 
   return preview;
+}
+
+async function previewPathSet(source, opts) {
+  const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
+  const paths = (await resolvePaths(source))
+    .filter((p) => !opts.htmlOnly || /\.html$/i.test(p));
+
+  if (paths.length === 0) {
+    console.error('No paths found.');
+    process.exit(1);
+  }
+
+  info(`Previewing ${paths.length} page(s) with concurrency ${concurrency}…`);
+  const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+  const results = await runConcurrent(
+    paths.map((p) => async () => {
+      try {
+        try {
+          await client.daPreviewFlush(p);
+        } catch (err) {
+          verbose(`DA flush skipped for ${p}: ${err.message}`);
+        }
+        const r = await client.helixPreview(p);
+        return { path: p, url: r?.preview?.url ?? '', status: 'ok' };
+      } catch (err) {
+        return { path: p, url: '', status: `error: ${err.message}` };
+      }
+    }),
+    concurrency,
+  );
+
+  print(results);
+  if (results.some((r) => r.status !== 'ok')) process.exit(1);
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

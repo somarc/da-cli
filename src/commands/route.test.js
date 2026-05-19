@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { classify, listAllPaths } from './route.js';
+import { listContentPaths } from '../lib/paths.js';
 import { DaApiError } from '../lib/da-client.js';
 
 // ── classify ──────────────────────────────────────────────────────────────────
@@ -188,5 +189,22 @@ describe('listAllPaths — recursion', () => {
     });
     const paths = await listAllPaths(client, '/docs/');
     assert.deepEqual(paths, ['/docs/index.html']);
+  });
+});
+
+describe('listContentPaths — extension filtering', () => {
+  test('filters recursive results by extension', async () => {
+    const client = makeListClient({
+      '/': [
+        { path: '/testorg/testrepo/index.html', name: 'index', ext: 'html' },
+        { path: '/testorg/testrepo/query-index.json', name: 'query-index', ext: 'json' },
+        { path: '/testorg/testrepo/docs', name: 'docs' },
+      ],
+      '/docs': [
+        { path: '/testorg/testrepo/docs/page.html', name: 'page', ext: 'html' },
+      ],
+    });
+    const paths = await listContentPaths(client, '/', { ext: 'html' });
+    assert.deepEqual(paths.sort(), ['/docs/page.html', '/index.html']);
   });
 });

@@ -35,11 +35,12 @@ export class DaClient {
     return res;
   }
 
-  async _helixFetch(endpoint, { method = 'GET', headers = {} } = {}) {
+  async _helixFetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
     const url = `${HELIX_ADMIN}${endpoint}`;
     const res = await fetch(url, {
       method,
       headers: { Authorization: `Bearer ${this.token}`, 'User-Agent': UA, ...headers },
+      body,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -201,14 +202,14 @@ export class DaClient {
   // ── Helix sidekick config ────────────────────────────────────────────────────
   async helixSidekickConfig() {
     const res = await this._helixFetch(
-      `/sidekick/${this.org}/${this._repoRequired()}`,
+      `/sidekick/${this.org}/${this._repoRequired()}/${this.branch}/config.json`,
     );
     return res.json();
   }
 
   async helixSidekickUpdate(cfg) {
     const res = await this._helixFetch(
-      `/sidekick/${this.org}/${this._repoRequired()}`,
+      `/sidekick/${this.org}/${this._repoRequired()}/${this.branch}/config.json`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

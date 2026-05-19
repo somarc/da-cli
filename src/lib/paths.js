@@ -18,7 +18,15 @@ export async function resolvePaths(source) {
   }
 
   const client = await createClient();
-  const start = source.replace(/\*$/, '').replace(/\/$/, '') || '/';
+  return listContentPaths(client, source);
+}
+
+/**
+ * Recursively list DA source document paths under a prefix.
+ * Optionally filter by extension, for example "html".
+ */
+export async function listContentPaths(client, prefix = '/', { ext } = {}) {
+  const start = prefix.replace(/\*$/, '').replace(/\/$/, '') || '/';
   const results = [];
   const queue = [start];
   while (queue.length) {
@@ -27,7 +35,9 @@ export async function resolvePaths(source) {
     const items = Array.isArray(data) ? data : (data?.sources ?? []);
     for (const item of items) {
       const rel = item.path.replace(`/${client.org}/${client.repo}`, '');
-      if (item.ext) results.push(rel);
+      if (item.ext) {
+        if (!ext || item.ext === ext.replace(/^\./, '')) results.push(rel);
+      }
       else queue.push(rel);
     }
   }
