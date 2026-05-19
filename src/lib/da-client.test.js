@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlainHtmlUrl } from './da-client.js';
+import {
+  buildLiveUrl,
+  buildPlainHtmlUrl,
+  buildPreviewUrl,
+  canonicalWebPath,
+} from './da-client.js';
 
 describe('buildPlainHtmlUrl — production URL construction', () => {
   it('uses the configured branch, not hardcoded main', () => {
@@ -39,5 +44,21 @@ describe('buildPlainHtmlUrl — production URL construction', () => {
   it('encodes the full URL correctly', () => {
     const url = buildPlainHtmlUrl({ org: 'adobe', repo: 'da-cli', branch: 'main' }, '/docs/intro');
     assert.equal(url, 'https://main--da-cli--adobe.aem.page/docs/intro.plain.html');
+  });
+});
+
+describe('canonical web URL construction', () => {
+  it('maps /index.html to the root URL', () => {
+    assert.equal(canonicalWebPath('/index.html'), '/');
+    assert.equal(buildPreviewUrl({ org: 'o', repo: 'r' }, '/index.html'), 'https://main--r--o.aem.page/');
+  });
+
+  it('maps folder index documents to trailing slash URLs', () => {
+    assert.equal(canonicalWebPath('/crisis/index.html'), '/crisis/');
+    assert.equal(buildLiveUrl({ org: 'o', repo: 'r' }, '/crisis/index.html'), 'https://main--r--o.aem.live/crisis/');
+  });
+
+  it('keeps non-index pages extensionless', () => {
+    assert.equal(canonicalWebPath('/crisis/check.html'), '/crisis/check');
   });
 });
