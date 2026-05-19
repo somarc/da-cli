@@ -76,6 +76,7 @@ export function makePreviewCommand() {
     .description('Preview every HTML source document under a DA prefix, including nav/footer if present')
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
+    .option('--verify', 'Fetch .plain.html after preview and mark empty/failing content')
     .action(async (prefix = '/', opts) => {
       await previewPathSet(prefix, { ...opts, htmlOnly: true });
     });
@@ -119,7 +120,9 @@ async function previewPathSet(source, opts) {
           verbose(`DA flush skipped for ${p}: ${err.message}`);
         }
         const r = await client.helixPreview(p);
-        return { path: p, url: r?.preview?.url ?? '', status: 'ok' };
+        const row = { path: p, url: r?.preview?.url ?? '', status: 'ok' };
+        if (opts.verify) row.verify = await verifyPlainHtml(client, p);
+        return row;
       } catch (err) {
         return { path: p, url: '', status: `error: ${err.message}` };
       }
@@ -128,7 +131,22 @@ async function previewPathSet(source, opts) {
   );
 
   print(results);
-  if (results.some((r) => r.status !== 'ok')) process.exit(1);
+  if (results.some((r) => r.status !== 'ok' || (opts.verify && r.verify !== 'ok'))) process.exit(1);
+}
+
+async function verifyPlainHtml(client, path) {
+  try {
+    const plainUrl = buildPlainHtmlUrl(
+      { org: client.org, repo: client.repo, branch: client.branch },
+      path,
+    );
+    const res = await fetch(plainUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) return `fail: HTTP ${res.status}`;
+    const body = await res.text();
+    return isEmptyContent(body) ? 'empty' : 'ok';
+  } catch (err) {
+    return `fail: ${err.message}`;
+  }
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,12 @@
 import { Command } from 'commander';
-import { createClient, DaApiError } from '../lib/da-client.js';
+import {
+  buildLiveUrl,
+  buildPlainHtmlUrl,
+  buildPreviewUrl,
+  canonicalWebPath,
+  createClient,
+  DaApiError,
+} from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
 import { guardWrite } from '../lib/mutation.js';
 
@@ -26,6 +33,49 @@ export function makeRouteCommand() {
       const exitCodes = { contentbus: 0, orphan: 2, codebus: 3, hybrid: 4, 'probe-failed': 5 };
       const code = exitCodes[verdict.ownership] ?? 1;
       if (code !== 0) process.exit(code);
+    });
+
+  // ─── canonical ─────────────────────────────────────────────────────────────
+  route
+    .command('canonical <path>')
+    .description('Show DA source path, canonical browser URL, preview/live URLs, and .plain.html URL for a route')
+    .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
+    .action(async (path, opts) => {
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {}, { authOptional: true });
+      const verdict = client.authError
+        ? { ownership: 'auth-unavailable', daSource: null, preview: null, live: null, error: client.authError.message }
+        : await classify(client, path);
+      const sourcePath = verdict.sourcePath ?? path;
+      const canonical = canonicalWebPath(sourcePath);
+      const notes = [];
+      if (client.authError) {
+        notes.push('Authentication is unavailable, so route ownership and status were not probed. Run `da auth login --refresh`.');
+      }
+      if (/\/index(?:\.html)?$/.test(sourcePath)) {
+        notes.push('Open the trailing-slash canonical URL; explicit /index can return no-index.');
+      }
+      if (verdict.preview === 200 && verdict.live !== 200) {
+        notes.push('Preview is current but live is not; run `da publish page` or `da publish tree` when ready.');
+      }
+      if (verdict.ownership === 'orphan') {
+        notes.push('Route is orphaned; check DA source path and preview the .html document.');
+      }
+
+      print({
+        input: path,
+        sourcePath,
+        canonicalPath: canonical,
+        ownership: verdict.ownership,
+        daSource: verdict.daSource,
+        previewStatus: verdict.preview,
+        liveStatus: verdict.live,
+        sourceLocation: verdict.sourceLocation,
+        error: verdict.error,
+        previewUrl: buildPreviewUrl(client, sourcePath),
+        liveUrl: buildLiveUrl(client, sourcePath),
+        plainHtmlUrl: buildPlainHtmlUrl(client, sourcePath),
+        notes,
+      });
     });
 
   // ─── audit ─────────────────────────────────────────────────────────────────

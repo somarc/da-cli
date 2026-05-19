@@ -10,18 +10,20 @@ const BASE_URLS = {
 const HELIX_ADMIN = 'https://admin.hlx.page';
 
 export class DaClient {
-  constructor({ org, repo, env = 'prod', branch = 'main', token }) {
+  constructor({ org, repo, env = 'prod', branch = 'main', token, authError }) {
     if (!org) throw new Error('org is required — run `da config set org <org>` or pass --org');
-    if (!token) throw new Error('no auth token — run `da auth login` first');
+    if (!token && !authError) throw new Error('no auth token — run `da auth login` first');
     if (!BASE_URLS[env]) throw new Error(`unknown --env "${env}" — valid values: ${Object.keys(BASE_URLS).join(', ')}`);
     this.org = org;
     this.repo = repo;
     this.branch = branch;
     this.baseUrl = BASE_URLS[env];
     this.token = token;
+    this.authError = authError;
   }
 
   async _fetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
+    if (!this.token) throw this.authError ?? new Error('no auth token — run `da auth login` first');
     const url = `${this.baseUrl}${endpoint}`;
     const res = await fetch(url, {
       method,
@@ -36,6 +38,7 @@ export class DaClient {
   }
 
   async _helixFetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
+    if (!this.token) throw this.authError ?? new Error('no auth token — run `da auth login` first');
     const url = `${HELIX_ADMIN}${endpoint}`;
     const res = await fetch(url, {
       method,
@@ -273,6 +276,20 @@ export function buildPlainHtmlUrl({ org, repo, branch = 'main' }, path) {
   return `https://${branch}--${repo}--${org}.aem.page${norm(segment)}.plain.html`;
 }
 
+export function canonicalWebPath(path) {
+  const stripped = norm(path).replace(/\.html$/, '');
+  if (stripped === '/index') return '/';
+  return stripped.replace(/\/index$/, '/');
+}
+
+export function buildPreviewUrl({ org, repo, branch = 'main' }, path) {
+  return `https://${branch}--${repo}--${org}.aem.page${canonicalWebPath(path)}`;
+}
+
+export function buildLiveUrl({ org, repo, branch = 'main' }, path) {
+  return `https://${branch}--${repo}--${org}.aem.live${canonicalWebPath(path)}`;
+}
+
 // Static unauthenticated helper — used by `da design` and `da stardust` when no
 // auth token is available or needed (reads from public aem.page preview URLs).
 export async function fetchPlainHtml({ org, repo, branch = 'main' }, path) {
@@ -283,11 +300,18 @@ export async function fetchPlainHtml({ org, repo, branch = 'main' }, path) {
 }
 
 // Factory — reads context and auth, constructs a ready DaClient
-export async function createClient(overrides = {}) {
+export async function createClient(overrides = {}, { authOptional = false } = {}) {
   const { resolveConfig } = await import('./config.js');
   const { getToken } = await import('./auth.js');
 
   const { org, repo, env, config } = await resolveConfig(overrides);
-  const token = await getToken();
-  return new DaClient({ org, repo, env, branch: config.branch ?? 'main', token });
+  let token;
+  let authError;
+  try {
+    token = await getToken();
+  } catch (err) {
+    if (!authOptional) throw err;
+    authError = err;
+  }
+  return new DaClient({ org, repo, env, branch: config.branch ?? 'main', token, authError });
 }
