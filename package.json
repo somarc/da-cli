@@ -26,6 +26,7 @@
     "src/lib/auth.js",
     "src/lib/config.js",
     "src/lib/context.js",
+    "src/lib/content-workspace.js",
     "src/lib/da-client.js",
     "src/lib/design-rules.js",
     "src/lib/mutation.js",

@@ -1,4 +1,6 @@
 // Browser UA required — admin.da.live is behind Cloudflare bot protection
+import { getGlobals } from './context.js';
+
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const BASE_URLS = {
@@ -25,9 +27,15 @@ export class DaClient {
   async _fetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
     if (!this.token) throw this.authError ?? new Error('no auth token — run `da auth login` first');
     const url = `${this.baseUrl}${endpoint}`;
+    const requestId = getRequestId();
     const res = await fetch(url, {
       method,
-      headers: { Authorization: `Bearer ${this.token}`, 'User-Agent': UA, ...headers },
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        'User-Agent': UA,
+        ...(requestId ? { 'x-request-id': requestId } : {}),
+        ...headers,
+      },
       body,
     });
     if (!res.ok) {
@@ -40,9 +48,15 @@ export class DaClient {
   async _helixFetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
     if (!this.token) throw this.authError ?? new Error('no auth token — run `da auth login` first');
     const url = `${HELIX_ADMIN}${endpoint}`;
+    const requestId = getRequestId();
     const res = await fetch(url, {
       method,
-      headers: { Authorization: `Bearer ${this.token}`, 'User-Agent': UA, ...headers },
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        'User-Agent': UA,
+        ...(requestId ? { 'x-request-id': requestId } : {}),
+        ...headers,
+      },
       body,
     });
     if (!res.ok) {
@@ -248,6 +262,14 @@ export class DaClient {
     if (!this.repo) throw new Error('repo is required — run `da config set repo <repo>` or pass --repo');
     return this.repo;
   }
+}
+
+function getRequestId() {
+  const globals = getGlobals();
+  if (globals.requestId) return globals.requestId;
+  const explicit = process.env.DA_REQUEST_ID || process.env.AEM_REQUEST_ID;
+  if (explicit) return explicit;
+  return undefined;
 }
 
 export class DaApiError extends Error {

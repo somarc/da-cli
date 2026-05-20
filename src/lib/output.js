@@ -1,4 +1,7 @@
 import { getGlobals } from './context.js';
+import { appendFileSync } from 'node:fs';
+
+const LEVELS = { silent: 0, error: 1, warn: 2, info: 3, debug: 4 };
 
 // Resolves output format: explicit --format flag wins; otherwise auto-detect
 // from TTY state (piped stdout → JSON for machine consumption).
@@ -54,9 +57,31 @@ function printMd(data) {
 }
 
 export function info(msg) {
-  if (!getGlobals().quiet) console.error(msg);
+  log('info', msg);
 }
 
 export function verbose(msg) {
-  if (getGlobals().verbose) console.error(`[verbose] ${msg}`);
+  const globals = getGlobals();
+  if (globals.verbose || globals.logLevel === 'debug') log('debug', msg);
+}
+
+export function warn(msg) {
+  log('warn', msg);
+}
+
+export function error(msg) {
+  log('error', msg);
+}
+
+export function log(level, msg) {
+  const globals = getGlobals();
+  if (globals.quiet && level !== 'error') return;
+  const configured = LEVELS[globals.logLevel] ?? LEVELS.info;
+  if ((LEVELS[level] ?? LEVELS.info) > configured) return;
+  const line = level === 'info' ? String(msg) : `[${level}] ${msg}`;
+  if (globals.logFile) {
+    appendFileSync(globals.logFile, `${new Date().toISOString()} ${line}\n`, 'utf8');
+  } else {
+    console.error(line);
+  }
 }

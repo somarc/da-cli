@@ -37,6 +37,9 @@ These flags apply to every command and are resolved before any subcommand runs.
 | `--repo <repo>` | DA repo |
 | `--env <env>` | Environment: `dev` \| `stage` \| `prod` (default: `prod`) |
 | `--format <fmt>` | Output format: `table` \| `json` \| `md` (default: `table`) |
+| `--log-level <level>` | Log level: `silent` \| `error` \| `warn` \| `info` \| `debug` (default: `info`) |
+| `--log-file <file>` | Append logs to a file instead of stderr |
+| `--request-id <id>` | Request correlation ID sent as `x-request-id` to DA/Helix admin APIs |
 | `--dry-run` | Show what would happen without mutating (default for write operations) |
 | `--commit` | Execute mutations (required to override dry-run on all write operations) |
 | `--quiet` | Suppress progress output, print only results |
@@ -51,13 +54,15 @@ Notes:
 
 ## Configuration
 
+`.env` files are loaded automatically by searching upward from the current directory. `DA_*` and `AEM_*` environment variables are supported for the common root options.
+
 Config is resolved in this precedence order (highest wins):
 
 ```
-CLI flags  >  per-command overrides  >  project .da.json  >  ~/.da/config.json  >  defaults
+per-command overrides  >  CLI flags  >  DA_*/AEM_* environment  >  project .da.json  >  ~/.da/config.json  >  defaults
 ```
 
-In addition to `org`, `repo`, and `env`, config may also include `branch`. Commands that support `--branch` use that as the default when the flag is omitted.
+In addition to `org`, `repo`, and `env`, config may also include `branch`. Commands that support `--branch` use that as the default when the flag is omitted. Environment equivalents are `DA_ORG`/`AEM_ORG`, `DA_REPO`/`AEM_REPO`, `DA_ENV`/`AEM_ENV`, `DA_BRANCH`/`AEM_BRANCH`, plus `DA_FORMAT`, `DA_LOG_LEVEL`, `DA_LOG_FILE`, and `DA_REQUEST_ID`.
 
 ### `da config init`
 
@@ -211,6 +216,69 @@ List version history for a document.
 
 ```bash
 da content versions /index.html
+```
+
+### `da content clone`
+
+Clone DA source documents into a local `content/` workspace and write tracking state to `.da/content-state.json`.
+
+```bash
+da content clone --path /blog
+da content clone --all
+da content clone --path / --force
+```
+
+### `da content status`
+
+Show locally added, modified, and deleted files under `content/`.
+
+```bash
+da content status
+```
+
+### `da content diff [path]`
+
+Show a diff between local `content/` files and the current remote DA source.
+
+```bash
+da content diff
+da content diff /blog/post.html
+```
+
+### `da content add [files...]`
+
+Stage local workspace changes. With no files, stages all changed files.
+
+```bash
+da content add
+da content add content/blog/post.html
+```
+
+### `da content commit`
+
+Record a local content commit for staged files.
+
+```bash
+da content commit -m "Update blog copy"
+```
+
+### `da content push`
+
+Push committed local workspace changes to DA. Dry-run by default; pass root `--commit` to write.
+
+```bash
+da content push
+da --commit content push
+da --commit content push --path /blog
+```
+
+### `da content merge [path]`
+
+Refresh local workspace files from the current remote DA source.
+
+```bash
+da content merge
+da content merge /blog/post.html
 ```
 
 ---

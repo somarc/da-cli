@@ -7,9 +7,93 @@ import { resolveConfig } from '../lib/config.js';
 import { getToken } from '../lib/auth.js';
 import { DaApiError } from '../lib/da-client.js';
 import { listContentPaths } from '../lib/paths.js';
+import {
+  cloneWorkspace,
+  commitWorkspace,
+  mergeWorkspace,
+  pushWorkspace,
+  stage,
+  workspaceDiff,
+  workspaceStatus,
+} from '../lib/content-workspace.js';
 
 export function makeContentCommand() {
   const content = new Command('content').description('CRUD operations on DA source documents');
+
+  content
+    .command('clone')
+    .description('Clone DA content locally into content/')
+    .option('--path <path>', 'DA folder to clone, for example /blog')
+    .option('--all', 'Clone the entire site content')
+    .option('--force', 'Replace an existing content/ checkout')
+    .action(async (opts) => {
+      if (!opts.all && !opts.path) {
+        console.error('Missing --path. Use --all to clone the entire site.');
+        process.exit(1);
+      }
+      const client = await createClient();
+      const result = await cloneWorkspace(client, { rootPath: opts.all ? '/' : opts.path, force: opts.force });
+      info(`Cloned ${result.files} files into content/`);
+    });
+
+  content
+    .command('status')
+    .description('Show locally added, modified, and deleted content files')
+    .action(async () => {
+      const rows = await workspaceStatus();
+      if (!rows.length) info('nothing to commit, working tree clean');
+      else print(rows);
+    });
+
+  content
+    .command('diff [path]')
+    .description('Show diff between local and remote content')
+    .action(async (path) => {
+      const client = await createClient();
+      const diff = await workspaceDiff(client, path);
+      info(diff || '(no changes)');
+    });
+
+  content
+    .command('add [files...]')
+    .description('Stage local content changes')
+    .action(async (files = []) => {
+      const staged = await stage(files);
+      print(staged.map((path) => ({ path })));
+    });
+
+  content
+    .command('commit')
+    .description('Commit staged local content changes')
+    .requiredOption('-m, --message <message>', 'Commit message')
+    .action(async (opts) => {
+      const commit = await commitWorkspace(opts.message);
+      print(commit);
+    });
+
+  content
+    .command('push')
+    .description('Push committed local content changes to DA — requires --commit')
+    .option('--path <path>', 'Push only a specific file or subtree')
+    .option('--force', 'Allow unstaged/uncommitted changes to be pushed')
+    .action(async (opts) => {
+      const client = await createClient();
+      const plan = await pushWorkspace(client, { path: opts.path, force: opts.force, dryRun: true });
+      print(plan.planned.map((path) => ({ path })));
+      const { proceed } = guardWrite(`Push ${plan.planned.length} local content change(s) to DA`);
+      if (!proceed) return;
+      const result = await pushWorkspace(client, { path: opts.path, force: opts.force });
+      info(`Pushed ${result.pushed} file(s)`);
+    });
+
+  content
+    .command('merge [path]')
+    .description('Merge remote DA content into local content/')
+    .action(async (path) => {
+      const client = await createClient();
+      const result = await mergeWorkspace(client, path);
+      info(`Merged ${result.merged} file(s)`);
+    });
 
   // ─── list ──────────────────────────────────────────────────────────────────
   content
