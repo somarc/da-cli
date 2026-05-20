@@ -8,6 +8,8 @@ npm install -g @somarc/da-cli
 
 Requires Node >= 18 and Python 3 (used by `da auth login` to cache the token). Zero npm runtime dependencies beyond `commander` and `js-yaml`.
 
+For agent-specific operating guidance, see [AGENTS.md](./AGENTS.md). For the user-facing command reference, keep this README as the source of truth and mirror material changes into AGENTS.md.
+
 ---
 
 ## Quick start
@@ -138,6 +140,8 @@ curl -H "Authorization: Bearer $TOKEN" https://admin.da.live/list/myorg/myrepo
 
 CRUD operations on DA source documents.
 
+EDS reads HTML source documents from `.html` paths. When uploading an HTML file to an extensionless path, `da content put` normalizes the DA path to `.html` because DA stores `/path` and `/path.html` as distinct documents.
+
 ### `da content list [path]`
 
 List documents and folders at a path (default: repo root).
@@ -214,6 +218,8 @@ da content versions /index.html
 ## Preview
 
 Triggers the EDS content pipeline. Updates `*.aem.page` only — use `da publish` to promote to `*.aem.live`.
+
+Preview operations are safe to run without `--commit`; the root `--commit` flag is only needed for write operations such as content mutations, publishing, route cleanup, code purge, and Stardust migration.
 
 Preview is a two-step operation:
 1. Flush the DA editor cache (`admin.da.live/preview`)

@@ -2,6 +2,8 @@
 
 Agent orientation guide for `@somarc/da-cli` — a CLI for managing Adobe Edge Delivery Services (EDS) sites via the DA (Document Authoring) Admin API.
 
+This file is the agent-facing companion to [README.md](./README.md). Keep command names, flags, safety rules, and examples synchronized with the README; use README.md as the user-facing reference and this file as the operational checklist for agents.
+
 ---
 
 ## What This Tool Does
@@ -50,7 +52,7 @@ Auto-refresh: if the cached token expires within 30 seconds, the next API call r
 
 ## Configuration
 
-Resolution precedence: **CLI flags > project `.da.json` > `~/.da/config.json` > defaults**
+Resolution precedence: **CLI flags > per-command overrides > project `.da.json` > `~/.da/config.json` > defaults**
 
 ```bash
 da config init [--global]        # interactive setup: prompts for org, repo, env
@@ -88,6 +90,8 @@ These apply to every command:
 | `--quiet` | Suppress progress output |
 | `--verbose` | Print full request/response details |
 
+Root `--env` means DA admin environment: `dev | stage | prod`. `da index validate` and `da index query` also define a subcommand-local `--env preview|live` for the query target host.
+
 ---
 
 ## Safety Model
@@ -109,6 +113,7 @@ da --commit content put /index index.html # uploads
 
 ```bash
 da content list [path]                    # list documents and folders
+da content tree [prefix] [--ext html]     # recursively list source documents
 da content get <path> [-o <file>]         # fetch source to stdout or file
 da --commit content put <path> <file>     # upload document
 da --commit content delete <path>         # delete document
@@ -117,17 +122,23 @@ da --commit content copy <src> <dst>      # copy
 da content versions <path>               # list version history
 ```
 
+EDS reads `.html` source paths. `da content put /about about.html` normalizes to `/about.html`; DA stores `/about` and `/about.html` separately.
+
 ### Preview & Publish
 
 ```bash
 da preview page <path> [--branch <b>]              # preview single page
 da preview pages <source> [--concurrency N]        # batch preview from file or path prefix
+da preview tree [prefix] [--verify]                # preview every HTML source document under prefix
 da preview status <path>                           # check pipeline status
 
 da --commit publish page <path>                    # publish to live CDN
 da --commit publish pages <source>                 # batch publish
+da --commit publish tree [prefix] [--verify-live]  # publish every HTML source document under prefix
 da --commit publish unpublish <path>               # remove from live CDN
 ```
+
+`preview` updates `*.aem.page`; it does not publish to `*.aem.live`. `publish` promotes already previewed output and requires `--commit`.
 
 ### Deploy (preview + publish in one step)
 
@@ -142,6 +153,7 @@ Exit codes for `classify`: `0`=contentbus, `2`=orphan, `3`=codebus, `4`=hybrid, 
 
 ```bash
 da route classify <path>                           # probe single route ownership
+da route canonical <path>                          # show source/canonical/preview/live/plain URLs
 da route audit [--prefix <prefix>] [--concurrency N]  # classify all routes under prefix
 da --commit route clean <path>                     # delete DA source + flush preview
 ```
@@ -227,6 +239,7 @@ da --commit code purge <path>                    # purge CDN cache
 da site create <name> [--org] [--da-org] [--private] [--no-da]  # create EDS site (requires gh CLI)
 da site list [--org] [--limit N]                # list EDS repos in org
 da site info [repo] [--org] [--branch]          # pipeline health
+da site doctor [repo] [--deep]                  # DA registration, source, preview/live, code-bus diagnostics
 ```
 
 ### Skills Management
@@ -258,6 +271,8 @@ da stardust update                              # sync skill from adobe/skills
 ---
 
 ## Common Workflows
+
+Use README.md for the full user-facing command reference. When this file diverges from CLI help or README.md, treat CLI help (`da <command> --help`) as the implementation contract, then update both docs.
 
 ### Bootstrap a project
 
