@@ -949,22 +949,23 @@ The route is served from the code repo, not DA. Deleting the DA source won't rem
 # 1. Authenticate the CLI first (server inherits the token)
 da auth login
 
-# 2. Start the server (loopback-only by default)
+# 2. Start the server with x402 payment gating
 X402_WALLET_ADDRESS=0xYourWallet npm run serve
 
 # 3. Discover the agent card
 curl http://localhost:3402/.well-known/x402
 ```
 
-Without `X402_WALLET_ADDRESS`, the server binds to `127.0.0.1` only and payment gating is disabled (useful for local dev). Binding to a non-loopback address without a wallet address is refused at startup.
+Use `da-serve --no-x402` or `X402_ENABLED=false npm run serve` to disable payment gating for loopback-only local development. Binding to a non-loopback address without x402 payment gating is refused at startup.
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `X402_WALLET_ADDRESS` | — | Wallet address that receives payments (enables x402 gating) |
-| `X402_NETWORK` | `base` | EVM network for payment settlement |
-| `X402_FACILITATOR_URL` | `https://x402.org/facilitator` | x402 facilitator endpoint |
+| `X402_ENABLED` | `true` | Set to `false` or pass `--no-x402` to disable payment gating on loopback |
+| `X402_NETWORK` | `eip155:84532` | CAIP-2 EVM network for payment settlement |
+| `X402_FACILITATOR_URL` | `https://x402.org/facilitator` | x402 facilitator endpoint; use a production facilitator for mainnet networks |
 | `PORT` | `3402` | Server port |
 | `HOST` | `127.0.0.1` | Bind address (non-loopback requires `X402_WALLET_ADDRESS`) |
 
@@ -995,7 +996,7 @@ Store YAML pipeline files in `~/.da/pipelines/`. Pass the filename (without exte
 ```bash
 curl -X POST http://localhost:3402/v1/pipeline/run \
   -H 'Content-Type: application/json' \
-  -H 'X-Payment: <payment-proof>' \
+  -H 'PAYMENT-SIGNATURE: <payment-proof>' \
   -d '{ "pipeline": "my-deploy", "org": "acme", "repo": "site" }'
 ```
 
@@ -1004,9 +1005,9 @@ curl -X POST http://localhost:3402/v1/pipeline/run \
 Agents can submit any valid da-cli pipeline YAML descriptor inline. Steps run in dependency order with parallelism across batches. Steps with `requires_approval: true` are rejected at the API boundary (interactive stdin is not available in the HTTP context).
 
 ```bash
-curl -X POST http://localhost:3402/v1/pipeline/run \
+curl -X POST http://localhost:3402/v1/pipeline/custom \
   -H 'Content-Type: application/json' \
-  -H 'X-Payment: <payment-proof>' \
+  -H 'PAYMENT-SIGNATURE: <payment-proof>' \
   -d '{
     "org": "acme",
     "repo": "site",

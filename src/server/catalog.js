@@ -78,10 +78,22 @@ export const ROUTE_CATALOG = [
   },
 ];
 
-// Derive x402-express middleware config object from the catalog.
-export function toMiddlewareConfig(catalog, network) {
+// Derive @x402/express v2 middleware config object from the catalog.
+export function toMiddlewareConfig(catalog, network, payTo) {
   return Object.fromEntries(
-    catalog.map(({ route, price }) => [route, { price, network }])
+    catalog.map(({ route, price, description }) => [
+      route,
+      {
+        accepts: {
+          scheme: 'exact',
+          price,
+          network,
+          payTo,
+        },
+        description,
+        mimeType: 'application/json',
+      },
+    ])
   );
 }
 

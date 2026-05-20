@@ -1,7 +1,9 @@
 import { readFileSync, readFile as readFileCb } from 'node:fs';
 import { promisify } from 'node:util';
 import express from 'express';
-import { paymentMiddleware } from 'x402-express';
+import { HTTPFacilitatorClient } from '@x402/core/server';
+import { ExactEvmScheme } from '@x402/evm/exact/server';
+import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ROUTE_CATALOG, toMiddlewareConfig } from './catalog.js';
 import { buildFlags, hasApprovalGates, runDaCommand, withTempFile, resolvePipelineName } from './runner.js';
 import { agentCard } from './agent-card.js';
@@ -12,14 +14,15 @@ const { version: PKG_VERSION } = JSON.parse(
 );
 
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || 'https://x402.org/facilitator';
-const NETWORK = process.env.X402_NETWORK || 'base';
+const NETWORK = process.env.X402_NETWORK || 'eip155:84532';
 
-export function createServer({ walletAddress } = {}) {
+export function createServer({ walletAddress, x402Enabled } = {}) {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
 
   const addr = walletAddress ?? process.env.X402_WALLET_ADDRESS;
-  const paymentEnabled = !!addr;
+  const wantsX402 = x402Enabled ?? process.env.X402_ENABLED !== 'false';
+  const paymentEnabled = wantsX402 && !!addr;
 
   // ── Discovery endpoints (free — registered before payment middleware) ────────
   app.get('/', (req, res) => {
@@ -45,11 +48,14 @@ export function createServer({ walletAddress } = {}) {
 
   // ── x402 payment middleware (gates all routes registered after this) ─────────
   if (paymentEnabled) {
+    const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
+    const resourceServer = new x402ResourceServer(facilitatorClient)
+      .register('eip155:*', new ExactEvmScheme());
+
     app.use(
       paymentMiddleware(
-        addr,
-        toMiddlewareConfig(ROUTE_CATALOG, NETWORK),
-        { url: FACILITATOR_URL }
+        toMiddlewareConfig(ROUTE_CATALOG, NETWORK, addr),
+        resourceServer
       )
     );
   }

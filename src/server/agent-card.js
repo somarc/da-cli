@@ -8,7 +8,7 @@ export function agentCard(baseUrl = 'http://localhost:3402', { version = '0.0.0'
       'HTTP API for Adobe Document Authoring + Edge Delivery Services. ' +
       'Supports content CRUD, preview, publish, deploy, Stardust AI redesign, ' +
       'and custom YAML pipeline execution. The highest-value capability is ' +
-      'POST /v1/pipeline/run with { yaml } — agents submit their own YAML pipeline ' +
+      'POST /v1/pipeline/custom with { yaml } — agents submit their own YAML pipeline ' +
       'descriptors to compose complex multi-step DA workflows with dependencies ' +
       'and parallelism.',
     services: [

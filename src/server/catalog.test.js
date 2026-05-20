@@ -18,12 +18,17 @@ test('every catalog entry has route, price, description, body', () => {
   }
 });
 
-test('toMiddlewareConfig produces route → { price, network } map', () => {
-  const config = toMiddlewareConfig(ROUTE_CATALOG, 'base');
-  for (const { route, price } of ROUTE_CATALOG) {
+test('toMiddlewareConfig produces v2 route payment requirements', () => {
+  const payTo = '0x0000000000000000000000000000000000000001';
+  const config = toMiddlewareConfig(ROUTE_CATALOG, 'eip155:84532', payTo);
+  for (const { route, price, description } of ROUTE_CATALOG) {
     assert.ok(config[route], `missing route in middleware config: ${route}`);
-    assert.equal(config[route].price, price);
-    assert.equal(config[route].network, 'base');
+    assert.equal(config[route].accepts.scheme, 'exact');
+    assert.equal(config[route].accepts.price, price);
+    assert.equal(config[route].accepts.network, 'eip155:84532');
+    assert.equal(config[route].accepts.payTo, payTo);
+    assert.equal(config[route].description, description);
+    assert.equal(config[route].mimeType, 'application/json');
   }
   assert.equal(Object.keys(config).length, ROUTE_CATALOG.length);
 });
@@ -37,7 +42,11 @@ test('toEndpointsMap produces route → { price, description, body } map', () =>
 });
 
 test('middleware config and endpoints map have identical route sets', () => {
-  const middlewareRoutes = new Set(Object.keys(toMiddlewareConfig(ROUTE_CATALOG, 'base')));
+  const middlewareRoutes = new Set(Object.keys(toMiddlewareConfig(
+    ROUTE_CATALOG,
+    'eip155:84532',
+    '0x0000000000000000000000000000000000000001'
+  )));
   const endpointRoutes = new Set(Object.keys(toEndpointsMap(ROUTE_CATALOG)));
   assert.deepEqual(middlewareRoutes, endpointRoutes);
 });
