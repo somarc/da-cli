@@ -12,7 +12,7 @@ const BASE_URLS = {
 const HELIX_ADMIN = 'https://admin.hlx.page';
 
 export class DaClient {
-  constructor({ org, repo, env = 'prod', branch = 'main', token, authError }) {
+  constructor({ org, repo, env = 'prod', branch = 'main', token, authError, configSources = {} }) {
     if (!org) throw new Error('org is required — run `da config set org <org>` or pass --org');
     if (!token && !authError) throw new Error('no auth token — run `da auth login` first');
     if (!BASE_URLS[env]) throw new Error(`unknown --env "${env}" — valid values: ${Object.keys(BASE_URLS).join(', ')}`);
@@ -22,6 +22,7 @@ export class DaClient {
     this.baseUrl = BASE_URLS[env];
     this.token = token;
     this.authError = authError;
+    this.configSources = configSources;
   }
 
   async _fetch(endpoint, { method = 'GET', body, headers = {} } = {}) {
@@ -326,7 +327,7 @@ export async function createClient(overrides = {}, { authOptional = false } = {}
   const { resolveConfig } = await import('./config.js');
   const { getToken } = await import('./auth.js');
 
-  const { org, repo, env, config } = await resolveConfig(overrides);
+  const { org, repo, env, config, sources } = await resolveConfig(overrides);
   let token;
   let authError;
   try {
@@ -335,5 +336,5 @@ export async function createClient(overrides = {}, { authOptional = false } = {}
     if (!authOptional) throw err;
     authError = err;
   }
-  return new DaClient({ org, repo, env, branch: config.branch ?? 'main', token, authError });
+  return new DaClient({ org, repo, env, branch: config.branch ?? 'main', token, authError, configSources: sources });
 }

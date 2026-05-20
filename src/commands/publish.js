@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { buildLiveUrl, createClient, DaApiError } from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
 import { resolvePaths, runConcurrent } from '../lib/paths.js';
+import { enforceBulkWriteSafety, printWritePreflight } from '../lib/mutation.js';
 
 export function makePublishCommand() {
   const publish = new Command('publish').description('Promote previewed pages to live CDN (*.aem.live) — step 2 after `da preview`; requires --commit');
@@ -13,9 +14,15 @@ export function makePublishCommand() {
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
     .action(async (path, opts) => {
       const { guardWrite } = await import('../lib/mutation.js');
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+      printWritePreflight({
+        client,
+        operation: `publish page ${path}`,
+        paths: [path],
+        configSources: client.configSources,
+      });
       if (!guardWrite(`Publish ${path}`).proceed) return;
 
-      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
       info(`Publishing: ${path}`);
       try {
         const result = await client.helixLive(path);
@@ -36,6 +43,7 @@ export function makePublishCommand() {
     .description('Batch publish — reads paths from a file or a /prefix/ listing (recursive) — requires --commit')
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch')
+    .option('--yes', 'Confirm committed bulk publish after reviewing the preflight')
     .action(async (source, opts) => {
       const { guardWrite } = await import('../lib/mutation.js');
       const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
@@ -46,10 +54,27 @@ export function makePublishCommand() {
         process.exit(1);
       }
 
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+      printWritePreflight({
+        client,
+        operation: `publish pages ${source}`,
+        source,
+        paths,
+        configSources: client.configSources,
+      });
+      const bulkSafety = enforceBulkWriteSafety({
+        pathCount: paths.length,
+        yes: opts.yes,
+        configSources: client.configSources,
+        operation: `publish pages ${source}`,
+      });
+      if (!bulkSafety.proceed) {
+        console.error(bulkSafety.reason);
+        process.exit(1);
+      }
       if (!guardWrite(`Publish ${paths.length} page(s)`).proceed) return;
 
       info(`Publishing ${paths.length} page(s) with concurrency ${concurrency}…`);
-      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
       const results = await runConcurrent(
         paths.map((p) => async () => {
           try {
@@ -72,6 +97,7 @@ export function makePublishCommand() {
     .option('--concurrency <n>', 'Max parallel requests', '5')
     .option('--branch <branch>', 'Git branch')
     .option('--verify-live', 'Fetch each canonical live URL after publish and report HTTP status')
+    .option('--yes', 'Confirm committed bulk publish after reviewing the preflight')
     .action(async (prefix = '/', opts) => {
       const { guardWrite } = await import('../lib/mutation.js');
       const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
@@ -82,10 +108,27 @@ export function makePublishCommand() {
         process.exit(1);
       }
 
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+      printWritePreflight({
+        client,
+        operation: `publish tree ${prefix}`,
+        source: prefix,
+        paths,
+        configSources: client.configSources,
+      });
+      const bulkSafety = enforceBulkWriteSafety({
+        pathCount: paths.length,
+        yes: opts.yes,
+        configSources: client.configSources,
+        operation: `publish tree ${prefix}`,
+      });
+      if (!bulkSafety.proceed) {
+        console.error(bulkSafety.reason);
+        process.exit(1);
+      }
       if (!guardWrite(`Publish ${paths.length} HTML document(s) under ${prefix}`).proceed) return;
 
       info(`Publishing ${paths.length} page(s) with concurrency ${concurrency}…`);
-      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
       const results = await runConcurrent(
         paths.map((p) => async () => {
           try {
@@ -111,9 +154,16 @@ export function makePublishCommand() {
     .option('--branch <branch>', 'Git branch')
     .action(async (path, opts) => {
       const { guardWrite } = await import('../lib/mutation.js');
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
+      printWritePreflight({
+        client,
+        operation: `publish unpublish ${path}`,
+        paths: [path],
+        configSources: client.configSources,
+        notes: ['This removes the canonical route from the live CDN when permitted.'],
+      });
       if (!guardWrite(`Unpublish ${path}`).proceed) return;
 
-      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
       try {
         await client.helixUnpublish(path);
         info(`Unpublished: ${path}`);

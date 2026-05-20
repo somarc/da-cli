@@ -1,11 +1,8 @@
 import { Command } from 'commander';
 import { writeFile } from 'node:fs/promises';
-import { createClient } from '../lib/da-client.js';
+import { buildLiveUrl, canonicalWebPath, createClient, DaApiError } from '../lib/da-client.js';
 import { print, info, verbose } from '../lib/output.js';
-import { guardWrite, simpleDiff } from '../lib/mutation.js';
-import { resolveConfig } from '../lib/config.js';
-import { getToken } from '../lib/auth.js';
-import { DaApiError } from '../lib/da-client.js';
+import { guardWrite, printWritePreflight, simpleDiff } from '../lib/mutation.js';
 import { listContentPaths } from '../lib/paths.js';
 import {
   cloneWorkspace,
@@ -80,6 +77,13 @@ export function makeContentCommand() {
       const client = await createClient();
       const plan = await pushWorkspace(client, { path: opts.path, force: opts.force, dryRun: true });
       print(plan.planned.map((path) => ({ path })));
+      printWritePreflight({
+        client,
+        operation: 'content push',
+        source: opts.path,
+        paths: plan.planned,
+        configSources: client.configSources,
+      });
       const { proceed } = guardWrite(`Push ${plan.planned.length} local content change(s) to DA`);
       if (!proceed) return;
       const result = await pushWorkspace(client, { path: opts.path, force: opts.force });
@@ -205,6 +209,15 @@ export function makeContentCommand() {
       const diffText = simpleDiff(oldContent ?? '', newContent);
       info(oldContent === null ? `New document: ${path}` : `Diff for ${path}:`);
       if (oldContent !== null) info(diffText);
+      const notes = oldContent === null ? [await newDocumentRouteNote(client, path)] : [];
+      printWritePreflight({
+        client,
+        operation: `content put ${path}`,
+        source: file,
+        paths: [path],
+        configSources: client.configSources,
+        notes,
+      });
 
       const { proceed } = guardWrite(`Upload ${file} → ${path}`);
       if (!proceed) return;
@@ -222,8 +235,14 @@ export function makeContentCommand() {
     .command('delete <path>')
     .description('Delete source document — requires --commit')
     .action(async (path) => {
-      if (!guardWrite(`Delete ${path}`).proceed) return;
       const client = await createClient();
+      printWritePreflight({
+        client,
+        operation: `content delete ${path}`,
+        paths: [path],
+        configSources: client.configSources,
+      });
+      if (!guardWrite(`Delete ${path}`).proceed) return;
       try {
         await client.sourceDelete(path);
         info(`Deleted ${path}`);
@@ -237,8 +256,14 @@ export function makeContentCommand() {
     .command('move <src> <dst>')
     .description('Move/rename a document — requires --commit')
     .action(async (src, dst) => {
-      if (!guardWrite(`Move ${src} → ${dst}`).proceed) return;
       const client = await createClient();
+      printWritePreflight({
+        client,
+        operation: `content move ${src} ${dst}`,
+        paths: [src, dst],
+        configSources: client.configSources,
+      });
+      if (!guardWrite(`Move ${src} → ${dst}`).proceed) return;
       try {
         await client.move(src, dst);
         info(`Moved ${src} → ${dst}`);
@@ -252,8 +277,14 @@ export function makeContentCommand() {
     .command('copy <src> <dst>')
     .description('Copy a document to a new path — requires --commit')
     .action(async (src, dst) => {
-      if (!guardWrite(`Copy ${src} → ${dst}`).proceed) return;
       const client = await createClient();
+      printWritePreflight({
+        client,
+        operation: `content copy ${src} ${dst}`,
+        paths: [src, dst],
+        configSources: client.configSources,
+      });
+      if (!guardWrite(`Copy ${src} → ${dst}`).proceed) return;
       try {
         await client.copy(src, dst);
         info(`Copied ${src} → ${dst}`);
@@ -319,6 +350,22 @@ function warnIfFragment(html, path) {
     console.error('  Add <main> around your page content.');
   }
   console.error('');
+}
+
+async function newDocumentRouteNote(client, path) {
+  const liveUrl = buildLiveUrl(client, path);
+  try {
+    const res = await fetch(liveUrl, {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (res.ok) {
+      return `New DA source, but canonical live route ${canonicalWebPath(path)} currently returns ${res.status}. Run: da route canonical ${canonicalWebPath(path)}`;
+    }
+    return `New DA source; canonical live route ${canonicalWebPath(path)} currently returns ${res.status}.`;
+  } catch (err) {
+    return `New DA source; live route check failed for ${canonicalWebPath(path)}: ${err.message}`;
+  }
 }
 
 function handleApiError(err) {

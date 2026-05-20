@@ -1,7 +1,7 @@
 import { Command } from 'commander';
-import { createClient, DaApiError, buildPlainHtmlUrl } from '../lib/da-client.js';
+import { createClient, DaApiError } from '../lib/da-client.js';
 import { print, info } from '../lib/output.js';
-import { guardWrite } from '../lib/mutation.js';
+import { enforceBulkWriteSafety, guardWrite, printWritePreflight } from '../lib/mutation.js';
 import { resolvePaths, runConcurrent } from '../lib/paths.js';
 
 // deploy = preview + publish in one command.
@@ -21,6 +21,13 @@ export function makeDeployCommand() {
     .action(async (path, opts) => {
       const clientOpts = opts.branch ? { branch: opts.branch } : {};
       const client = await createClient(clientOpts);
+      printWritePreflight({
+        client,
+        operation: `deploy page ${path}`,
+        paths: [path],
+        configSources: client.configSources,
+        notes: ['Preview runs first; publish to live CDN requires --commit.'],
+      });
 
       // Step 1 — flush DA cache (best-effort)
       try { await client.daPreviewFlush(path); } catch { /* non-fatal */ }
@@ -57,6 +64,7 @@ export function makeDeployCommand() {
     .description('Batch preview then publish — reads paths from a file or a /prefix/ listing; publish requires --commit')
     .option('--concurrency <n>', 'Max parallel requests per phase', '5')
     .option('--branch <branch>', 'Git branch')
+    .option('--yes', 'Confirm committed bulk publish after reviewing the preflight')
     .action(async (source, opts) => {
       const concurrency = Math.max(1, parseInt(opts.concurrency, 10) || 5);
       const paths = await resolvePaths(source);
@@ -68,6 +76,24 @@ export function makeDeployCommand() {
 
       const clientOpts = opts.branch ? { branch: opts.branch } : {};
       const client = await createClient(clientOpts);
+      printWritePreflight({
+        client,
+        operation: `deploy pages ${source}`,
+        source,
+        paths,
+        configSources: client.configSources,
+        notes: ['Preview runs first; publish to live CDN requires --commit.'],
+      });
+      const bulkSafety = enforceBulkWriteSafety({
+        pathCount: paths.length,
+        yes: opts.yes,
+        configSources: client.configSources,
+        operation: `deploy pages ${source}`,
+      });
+      if (!bulkSafety.proceed) {
+        console.error(bulkSafety.reason);
+        process.exit(1);
+      }
 
       // Phase 1 — preview all pages
       info(`[1/2] Previewing ${paths.length} page(s) with concurrency ${concurrency}…`);

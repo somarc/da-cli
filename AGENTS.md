@@ -13,7 +13,7 @@ This file is the agent-facing companion to [README.md](./README.md). Keep comman
 - **DA Admin API** (`admin.da.live`) — content source CRUD, versioning, route management
 - **Helix Admin API** (`admin.hlx.page`) — preview/publish pipeline, CDN, code-bus
 
-Every destructive operation is **dry-run by default**. Pass `--commit` at the root level to execute writes.
+Every destructive operation is **dry-run by default**. Pass `--commit` at the root level to execute writes. Write commands print a target preflight. For committed bulk publish/deploy operations, pass explicit root `--org` and `--repo`, or use `--yes` only after reviewing the resolved target and path list.
 
 ---
 
@@ -169,19 +169,22 @@ da preview tree [prefix] [--verify]                # preview every HTML source d
 da preview status <path>                           # check pipeline status
 
 da --commit publish page <path>                    # publish to live CDN
-da --commit publish pages <source>                 # batch publish
-da --commit publish tree [prefix] [--verify-live]  # publish every HTML source document under prefix
+da --org <org> --repo <repo> --commit publish pages <source>  # batch publish with explicit target
+da --org <org> --repo <repo> --commit publish tree [prefix] [--verify-live]
 da --commit publish unpublish <path>               # remove from live CDN
 ```
 
 `preview` updates `*.aem.page`; it does not publish to `*.aem.live`. `publish` promotes already previewed output and requires `--commit`.
+Committed bulk publish from configured context is blocked unless `--yes` is supplied after reviewing the preflight.
 
 ### Deploy (preview + publish in one step)
 
 ```bash
 da --commit deploy page <path>                     # preview then publish
-da --commit deploy pages <source> [--concurrency N]  # batch: previews all, publishes successes
+da --org <org> --repo <repo> --commit deploy pages <source> [--concurrency N]
 ```
+
+Committed bulk deploy from configured context is blocked unless `--yes` is supplied after reviewing the preflight.
 
 ### Route Management
 
@@ -252,7 +255,7 @@ pipeline:
     - id: preview-all
       command: "preview pages /blog --concurrency 10"
     - id: publish-all
-      command: "publish pages /blog --commit"
+      command: "publish pages /blog --commit --yes"
       depends_on: [preview-all]
       requires_approval: true
       timeout: 5m
@@ -365,7 +368,7 @@ da --commit route clean /deprecated/old-page    # delete + flush
 
 ```bash
 da preview pages /blog --concurrency 20
-da --commit publish pages /blog --concurrency 10
+da --org somarc --repo my-site --commit publish pages /blog --concurrency 10
 ```
 
 ---

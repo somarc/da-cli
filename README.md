@@ -351,8 +351,9 @@ da publish page /index --commit
 Batch publish — same source format as `da preview pages`.
 
 ```bash
-da publish pages /blog --commit
-da publish pages paths.txt --commit --concurrency 10
+da --org somarc --repo chronicle --commit publish pages /blog
+da --org somarc --repo chronicle --commit publish pages paths.txt --concurrency 10
+da --commit publish pages /blog --yes  # allow configured target after reviewing preflight
 ```
 
 ### `da publish tree [prefix]`
@@ -363,6 +364,7 @@ Publish every HTML source document under a DA prefix to `*.aem.live`. Run `da pr
 da publish tree / --commit
 da publish tree /docs --concurrency 10 --commit
 da publish tree / --verify-live --commit   # fail if any canonical live URL is unreachable
+da --commit publish tree /docs --yes       # allow configured target after reviewing preflight
 ```
 
 ### `da publish unpublish <path>`
@@ -395,8 +397,9 @@ Batch preview first, then publish only the pages that previewed successfully.
 
 ```bash
 da deploy pages /blog
-da --commit deploy pages /blog --concurrency 10
-da --commit deploy pages paths.txt --branch feature-branch
+da --org somarc --repo chronicle --commit deploy pages /blog --concurrency 10
+da --org somarc --repo chronicle --commit deploy pages paths.txt --branch feature-branch
+da --commit deploy pages /blog --yes       # allow configured target after reviewing preflight
 ```
 
 ---
@@ -621,7 +624,7 @@ pipeline:
       command: "preview pages /blog --concurrency 10"
       depends_on: [preview-index]
     - id: publish-all
-      command: "publish pages /blog --commit"
+      command: "publish pages /blog --commit --yes"
       depends_on: [preview-blog]
       requires_approval: true
       timeout: 5m
@@ -811,7 +814,7 @@ da stardust migrate /index --commit
 da stardust migrate --all --commit
 ```
 
-After migration, publish with `da publish pages / --commit`.
+After migration, publish with explicit target flags, for example `da --org my-org --repo my-site --commit publish pages /`.
 
 ### `da stardust reset`
 
@@ -966,6 +969,13 @@ da --commit publish page /index
 da --commit deploy page /index
 ```
 
+Write commands print a compact preflight before remote mutation, including the resolved `org/repo`, branch, config source, operation, and affected paths. For committed bulk publish/deploy operations, if the target came from config or environment instead of explicit root `--org` and `--repo` flags, the command refuses to continue unless `--yes` is supplied after reviewing the preflight.
+
+```bash
+da --org somarc --repo chronicle --commit publish pages /blog
+da --commit publish pages /blog --yes
+```
+
 The `--commit` flag propagates through pipeline steps, so a single flag at the root gates an entire pipeline run.
 
 ---
@@ -987,14 +997,14 @@ da preview page /
 
 ```bash
 da preview pages /blog --concurrency 10
-da --commit publish pages /blog --concurrency 10
+da --org somarc --repo my-site --commit publish pages /blog --concurrency 10
 ```
 
 ### Preview + publish in one command
 
 ```bash
 da --commit deploy page /index
-da --commit deploy pages /blog --concurrency 10
+da --org somarc --repo my-site --commit deploy pages /blog --concurrency 10
 ```
 
 ### Import and publish an external page
@@ -1012,7 +1022,7 @@ da stardust direct "modern minimal SaaS product site, airy neutral"
 da stardust prototype --all
 # Review .stardust/prototypes/*.html in browser
 da stardust migrate --all --commit
-da --commit publish pages / --concurrency 10
+da --org my-org --repo my-site --commit publish pages / --concurrency 10
 ```
 
 ### Audit before publishing
@@ -1035,7 +1045,7 @@ pipeline:
       command: "preview pages / --concurrency 10"
       depends_on: [audit]
     - id: publish-all
-      command: "publish pages / --commit --concurrency 10"
+      command: "publish pages / --commit --concurrency 10 --yes"
       depends_on: [preview-all]
       requires_approval: true
 ```
