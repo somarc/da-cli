@@ -52,7 +52,9 @@ Auto-refresh: if the cached token expires within 30 seconds, the next API call r
 
 ## Configuration
 
-Resolution precedence: **CLI flags > per-command overrides > project `.da.json` > `~/.da/config.json` > defaults**
+`.env` files are loaded automatically by searching upward from the current directory. `DA_*` and `AEM_*` environment variables are supported for the common root options.
+
+Resolution precedence: **per-command overrides > CLI flags > `DA_*`/`AEM_*` environment > project `.da.json` > `~/.da/config.json` > defaults**
 
 ```bash
 da config init [--global]        # interactive setup: prompts for org, repo, env
@@ -73,6 +75,19 @@ da config set <key> <value>      # write to project config (add --global for use
 
 Config keys: `org`, `repo`, `env` (`prod`|`stage`|`dev`, default `prod`), `branch` (default `main`).
 
+Environment equivalents:
+
+```bash
+DA_ORG=my-org          # or AEM_ORG
+DA_REPO=my-site        # or AEM_REPO
+DA_ENV=prod            # or AEM_ENV
+DA_BRANCH=main         # or AEM_BRANCH
+DA_FORMAT=json         # or AEM_FORMAT
+DA_LOG_LEVEL=debug     # or AEM_LOG_LEVEL
+DA_LOG_FILE=./da.log   # or AEM_LOG_FILE
+DA_REQUEST_ID=run-123  # or AEM_REQUEST_ID
+```
+
 ---
 
 ## Global Flags
@@ -87,6 +102,9 @@ These apply to every command:
 | `--commit` | Execute mutations — required for all write operations |
 | `--dry-run` | Explicit dry-run (default behaviour, but useful to make intent clear) |
 | `--format <fmt>` | `table` \| `json` \| `md` (auto-detected from TTY) |
+| `--log-level <level>` | `silent` \| `error` \| `warn` \| `info` \| `debug` |
+| `--log-file <file>` | Append logs to a file instead of stderr |
+| `--request-id <id>` | Send `x-request-id` on DA/Helix admin API calls |
 | `--quiet` | Suppress progress output |
 | `--verbose` | Print full request/response details |
 
@@ -123,6 +141,24 @@ da content versions <path>               # list version history
 ```
 
 EDS reads `.html` source paths. `da content put /about about.html` normalizes to `/about.html`; DA stores `/about` and `/about.html` separately.
+
+### Local Content Workspace
+
+Use this when an agent needs a Git-like local edit loop for DA source documents. The workspace writes files under `content/` and tracks base hashes, staged paths, and local content commits in `.da/content-state.json`.
+
+```bash
+da content clone --path /blog [--force]    # clone subtree into content/
+da content clone --all                     # clone the entire site intentionally
+da content status                          # added / modified / deleted, with staged marker
+da content diff [path]                     # compare local content/ to current DA source
+da content add [files...]                  # stage specific files, or all changed files
+da content commit -m "message"             # record local content checkpoint
+da content push [--path /blog]             # dry-run plan by default
+da --commit content push [--path /blog]    # push committed workspace changes to DA
+da content merge [path]                    # refresh local files from remote DA source
+```
+
+`content push` refuses uncommitted changes unless `--force` is passed. It still uses the global dry-run guard; root `--commit` is required for remote writes.
 
 ### Preview & Publish
 
@@ -293,6 +329,21 @@ da content put /index.html ./index.html          # dry-run: shows diff
 da --commit content put /index.html ./index.html # commit
 da --commit preview page /index                  # flush DA cache + trigger Helix pipeline
 da --commit deploy page /index                   # or deploy (preview + publish in one)
+```
+
+### Local content workspace cycle
+
+```bash
+da content clone --path /
+# edit files under content/
+da content status
+da content diff /index.html
+da content add content/index.html
+da content commit -m "Update homepage copy"
+da content push                                  # dry-run plan
+da --commit content push                         # write to DA
+da preview page /index
+da --commit publish page /index
 ```
 
 ### Audit before publishing
