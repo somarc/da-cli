@@ -93,18 +93,27 @@ export function makeSkillsCommand() {
   // ─── update ────────────────────────────────────────────────────────────────
   skills
     .command('update [name]')
-    .description('Update one or all installed skills to latest versions')
-    .option('--global', 'Update global skills')
+    .description('Update a known skill (impeccable | stardust | snowflake) to latest version')
+    .option('--global', 'Update global skill')
     .action(async (name, opts) => {
-      if (name) {
-        info(`Updating skill: ${name}`);
-        // Re-install with force to pick up latest version
-        await runUpskill([`--skill`, name, '--force', ...(opts.global ? ['-g'] : [])]);
-      } else {
-        info('Updating all installed skills…');
-        // List installed skills, re-install each
-        console.error('Use `da skills list` to see installed skills, then `da skills update <name>` for each.');
+      if (!name) {
+        console.error('Batch update is not yet implemented — origin metadata is not tracked per-install.');
+        console.error('Update known skills by name: da skills update impeccable|stardust|snowflake');
+        console.error('For other skills, reinstall with the original source: da skills install <owner/repo>');
+        process.exit(1);
       }
+
+      const source = KNOWN_REGISTRIES[name];
+      if (!source) {
+        console.error(`Cannot update "${name}" — origin not tracked.`);
+        console.error(`Reinstall with: da skills install <owner/repo[@branch]> [--skill ${name}]`);
+        console.error(`Known shorthands: ${Object.keys(KNOWN_REGISTRIES).join(', ')}`);
+        process.exit(1);
+      }
+
+      const extra = name === 'stardust' ? ['--path', 'plugins/stardust'] : [];
+      info(`Updating ${name} from ${source}…`);
+      await runUpskill([source, ...extra, '--force', ...(opts.global ? ['-g'] : [])]);
     });
 
   // ─── bootstrap ─────────────────────────────────────────────────────────────
