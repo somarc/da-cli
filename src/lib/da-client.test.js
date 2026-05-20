@@ -5,6 +5,7 @@ import {
   buildPlainHtmlUrl,
   buildPreviewUrl,
   canonicalWebPath,
+  DaClient,
 } from './da-client.js';
 
 describe('buildPlainHtmlUrl — production URL construction', () => {
@@ -60,5 +61,18 @@ describe('canonical web URL construction', () => {
 
   it('keeps non-index pages extensionless', () => {
     assert.equal(canonicalWebPath('/crisis/check.html'), '/crisis/check');
+  });
+});
+
+describe('DaClient auth-optional diagnostics', () => {
+  it('can carry auth errors for diagnostic callers', async () => {
+    const authError = new Error('token refresh failed');
+    const client = new DaClient({ org: 'o', repo: 'r', authError });
+
+    assert.equal(client.authError, authError);
+    await assert.rejects(
+      () => client.sourceGet('/index.html'),
+      /token refresh failed/,
+    );
   });
 });

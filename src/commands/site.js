@@ -197,7 +197,7 @@ export function makeSiteCommand() {
         ...(opts.org ? { org: opts.org } : {}),
         ...(repo ? { repo } : {}),
         ...(opts.branch ? { branch: opts.branch } : {}),
-      });
+      }, { authOptional: true });
 
       info(`Running site doctor for ${client.org}/${client.repo} (${client.branch})…`);
 

@@ -41,11 +41,16 @@ export function makeRouteCommand() {
     .description('Show DA source path, canonical browser URL, preview/live URLs, and .plain.html URL for a route')
     .option('--branch <branch>', 'Git branch (overrides config.branch, default: main)')
     .action(async (path, opts) => {
-      const client = await createClient(opts.branch ? { branch: opts.branch } : {});
-      const verdict = await classify(client, path);
+      const client = await createClient(opts.branch ? { branch: opts.branch } : {}, { authOptional: true });
+      const verdict = client.authError
+        ? { ownership: 'auth-unavailable', daSource: null, preview: null, live: null, error: client.authError.message }
+        : await classify(client, path);
       const sourcePath = verdict.sourcePath ?? path;
       const canonical = canonicalWebPath(sourcePath);
       const notes = [];
+      if (client.authError) {
+        notes.push('Authentication is unavailable, so route ownership and status were not probed. Run `da auth login --refresh`.');
+      }
       if (/\/index(?:\.html)?$/.test(sourcePath)) {
         notes.push('Open the trailing-slash canonical URL; explicit /index can return no-index.');
       }
@@ -65,6 +70,7 @@ export function makeRouteCommand() {
         previewStatus: verdict.preview,
         liveStatus: verdict.live,
         sourceLocation: verdict.sourceLocation,
+        error: verdict.error,
         previewUrl: buildPreviewUrl(client, sourcePath),
         liveUrl: buildLiveUrl(client, sourcePath),
         plainHtmlUrl: buildPlainHtmlUrl(client, sourcePath),
