@@ -1,0 +1,194 @@
+{
+  "actions": {
+    "da-cli.workspace": {
+      "type": "workspaceCommand",
+      "title": "DA CLI Workspace",
+      "subtitle": "Config, content, routes, audits, preview, and agent panes",
+      "commandName": "DA CLI Workspace",
+      "icon": { "type": "symbol", "name": "rectangle.3.group" }
+    },
+    "da-cli.agent.codex": {
+      "type": "command",
+      "title": "Codex",
+      "subtitle": "Start Codex in this pane",
+      "command": "codex",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "sparkles" }
+    },
+    "da-cli.config.show": {
+      "type": "command",
+      "title": "Config",
+      "subtitle": "Show resolved DA context",
+      "command": "node bin/da.js config show",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "gearshape" }
+    },
+    "da-cli.auth.status": {
+      "type": "command",
+      "title": "Auth",
+      "subtitle": "Show DA auth token status",
+      "command": "node bin/da.js auth status",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "person.badge.key" }
+    },
+    "da-cli.content.tree": {
+      "type": "command",
+      "title": "Content Tree",
+      "subtitle": "List DA HTML documents",
+      "command": "node bin/da.js content tree / --ext html",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "list.bullet.indent" }
+    },
+    "da-cli.site.doctor": {
+      "type": "command",
+      "title": "Site Doctor",
+      "subtitle": "Check DA-backed EDS site health",
+      "command": "node bin/da.js site doctor",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "stethoscope" }
+    },
+    "da-cli.test": {
+      "type": "command",
+      "title": "Test",
+      "subtitle": "Run DA CLI tests",
+      "command": "npm test",
+      "target": "newTabInCurrentPane",
+      "confirm": true,
+      "icon": { "type": "symbol", "name": "checkmark.seal" }
+    }
+  },
+  "ui": {
+    "newWorkspace": {
+      "action": "da-cli.workspace",
+      "contextMenu": [
+        { "action": "da-cli.workspace", "title": "DA CLI Workspace" },
+        { "type": "separator" },
+        { "action": "cmux.newTerminal", "title": "New Terminal" },
+        { "action": "cmux.newBrowser", "title": "New Browser" }
+      ]
+    },
+    "surfaceTabBar": {
+      "buttons": [
+        "cmux.newTerminal",
+        "cmux.newBrowser",
+        "cmux.splitRight",
+        "cmux.splitDown",
+        "da-cli.agent.codex",
+        "da-cli.config.show",
+        "da-cli.auth.status",
+        "da-cli.content.tree",
+        "da-cli.site.doctor",
+        "da-cli.test"
+      ]
+    }
+  },
+  "commands": [
+    {
+      "name": "DA CLI Workspace",
+      "description": "Develop da-cli with DA context, content discovery, route/site checks, audits, and an agent pane.",
+      "keywords": ["da", "cli", "eds", "workspace", "content", "audit", "agent"],
+      "workspace": {
+        "name": "DA CLI",
+        "cwd": ".",
+        "color": "#0f766e",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.42,
+          "children": [
+            {
+              "direction": "vertical",
+              "split": 0.5,
+              "children": [
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "Context",
+                        "command": "printf 'DA CLI context\\n\\n'; node bin/da.js config show || true; printf '\\n'; node bin/da.js auth status || true; printf '\\nCommon setup:\\nnode bin/da.js auth login\\nnode bin/da.js config init\\n\\n'; exec ${SHELL:-/bin/zsh} -l",
+                        "focus": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "Tests",
+                        "command": "printf 'DA CLI tests\\n\\nnpm test\\nnode --test src/**/*.test.js\\n\\n'; exec ${SHELL:-/bin/zsh} -l"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "direction": "vertical",
+              "split": 0.55,
+              "children": [
+                {
+                  "direction": "horizontal",
+                  "split": 0.5,
+                  "children": [
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Content",
+                            "command": "printf 'DA content discovery\\n\\nRead-only commands:\\nnode bin/da.js content list /\\nnode bin/da.js content tree / --ext html\\nnode bin/da.js route canonical /index.html\\nnode bin/da.js route audit --prefix /\\n\\nDry-run writes stay dry unless --commit is passed explicitly.\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Audit",
+                            "command": "printf 'Quality and delivery checks\\n\\nnode bin/da.js site doctor\\nnode bin/da.js audit full /index\\nnode bin/da.js design audit /index\\nnode bin/da.js index show\\nnode bin/da.js index validate\\n\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "direction": "horizontal",
+                  "split": 0.5,
+                  "children": [
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Preview",
+                            "command": "printf 'Preview/deploy lane\\n\\nSafe preview commands:\\nnode bin/da.js preview status /index\\nnode bin/da.js preview page /index\\nnode bin/da.js deploy page /index\\n\\nPublishing and deploy promotion require root --commit and explicit approval.\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Agent",
+                            "command": "printf 'Agent lane for DA CLI work. Suggested prompt:\\n\\nHelp with one focused da-cli task. Use dry-run/read-only DA commands for evidence. Do not pass --commit, publish, purge, migrate, create sites, or modify remote content without explicit approval.\\n\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

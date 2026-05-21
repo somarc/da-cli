@@ -1157,6 +1157,15 @@ To run the CLI locally without installing:
 node ./bin/da.js auth status
 ```
 
+### CMUX workspace for DA/EDS
+
+This repo includes an experimental CMUX workspace recipe for DA/EDS agentic development flows.
+
+- `.cmux/cmux.json` adds a project-local **DA CLI Workspace** for developing this CLI.
+- `templates/cmux/da-cli/cmux.json` can be copied into a DA/EDS project repo as `.cmux/cmux.json`.
+
+See [`docs/cmux/da-mux.md`](docs/cmux/da-mux.md) for the workspace shape and product direction.
+
 ---
 
 ## License

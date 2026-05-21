@@ -1,0 +1,167 @@
+{
+  "actions": {
+    "da.workspace": {
+      "type": "workspaceCommand",
+      "title": "DA Workspace",
+      "subtitle": "Context, content, audits, preview, and agent panes",
+      "commandName": "DA Workspace",
+      "icon": { "type": "symbol", "name": "rectangle.3.group" }
+    },
+    "da.agent.codex": {
+      "type": "command",
+      "title": "Codex",
+      "subtitle": "Start Codex in this DA/EDS repo",
+      "command": "codex",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "sparkles" }
+    },
+    "da.config.show": {
+      "type": "command",
+      "title": "DA Config",
+      "subtitle": "Show resolved DA context",
+      "command": "da config show",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "gearshape" }
+    },
+    "da.auth.status": {
+      "type": "command",
+      "title": "DA Auth",
+      "subtitle": "Show auth token status",
+      "command": "da auth status",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "person.badge.key" }
+    },
+    "da.content.tree": {
+      "type": "command",
+      "title": "Content Tree",
+      "subtitle": "List DA HTML documents",
+      "command": "da content tree / --ext html",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "list.bullet.indent" }
+    },
+    "da.site.doctor": {
+      "type": "command",
+      "title": "Site Doctor",
+      "subtitle": "Check DA-backed EDS health",
+      "command": "da site doctor",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "symbol", "name": "stethoscope" }
+    }
+  },
+  "ui": {
+    "newWorkspace": {
+      "action": "da.workspace",
+      "contextMenu": [
+        { "action": "da.workspace", "title": "DA Workspace" },
+        { "type": "separator" },
+        { "action": "cmux.newTerminal", "title": "New Terminal" },
+        { "action": "cmux.newBrowser", "title": "New Browser" }
+      ]
+    },
+    "surfaceTabBar": {
+      "buttons": [
+        "cmux.newTerminal",
+        "cmux.newBrowser",
+        "cmux.splitRight",
+        "cmux.splitDown",
+        "da.agent.codex",
+        "da.config.show",
+        "da.auth.status",
+        "da.content.tree",
+        "da.site.doctor"
+      ]
+    }
+  },
+  "commands": [
+    {
+      "name": "DA Workspace",
+      "description": "Open a DA/EDS workspace with context, content discovery, quality checks, preview, and agent lanes.",
+      "keywords": ["da", "eds", "workspace", "content", "preview", "audit", "agent"],
+      "workspace": {
+        "name": "DA",
+        "cwd": ".",
+        "color": "#0f766e",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.42,
+          "children": [
+            {
+              "direction": "vertical",
+              "split": 0.5,
+              "children": [
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "Context",
+                        "command": "printf 'DA context\\n\\n'; da config show || true; printf '\\n'; da auth status || true; printf '\\nCommon setup:\\nda auth login\\nda config init\\n\\n'; exec ${SHELL:-/bin/zsh} -l",
+                        "focus": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "Content",
+                        "command": "printf 'DA content discovery\\n\\nRead-only commands:\\nda content list /\\nda content tree / --ext html\\nda route canonical /index.html\\nda route audit --prefix /\\n\\nDry-run writes stay dry unless --commit is passed explicitly.\\n'; exec ${SHELL:-/bin/zsh} -l"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "direction": "vertical",
+              "split": 0.55,
+              "children": [
+                {
+                  "direction": "horizontal",
+                  "split": 0.5,
+                  "children": [
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Audit",
+                            "command": "printf 'Quality and delivery checks\\n\\nda site doctor\\nda audit full /index\\nda design audit /index\\nda index show\\nda index validate\\n\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "pane": {
+                        "surfaces": [
+                          {
+                            "type": "terminal",
+                            "name": "Preview",
+                            "command": "printf 'Preview/deploy lane\\n\\nSafe preview commands:\\nda preview status /index\\nda preview page /index\\nda deploy page /index\\n\\nPublishing and deploy promotion require root --commit and explicit approval.\\n'; exec ${SHELL:-/bin/zsh} -l"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "Agent",
+                        "command": "printf 'Agent lane for DA/EDS work. Suggested prompt:\\n\\nWork on one focused DA/EDS task. Use dry-run/read-only DA commands for evidence. Do not pass --commit, publish, purge, migrate, create sites, or modify remote content without explicit approval.\\n\\n'; exec ${SHELL:-/bin/zsh} -l"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
