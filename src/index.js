@@ -20,6 +20,7 @@ import { makeDesignCommand } from './commands/design.js';
 import { makeStardustCommand } from './commands/stardust.js';
 import { makeSiteCommand } from './commands/site.js';
 import { makeSkillsCommand } from './commands/skills.js';
+import { makeUpCommand } from './commands/up.js';
 
 const program = new Command();
 
@@ -71,5 +72,6 @@ program.addCommand(makeDesignCommand());
 program.addCommand(makeStardustCommand());
 program.addCommand(makeSiteCommand());
 program.addCommand(makeSkillsCommand());
+program.addCommand(makeUpCommand());
 
 program.parseAsync(process.argv);

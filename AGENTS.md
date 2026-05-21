@@ -127,6 +127,19 @@ da --commit content put /index index.html # uploads
 
 ## Command Reference
 
+### Local Server
+
+Use this when an agent needs a deterministic browser-verification loop for the current EDS repo.
+
+```bash
+da up                         # serve local code, content/ when present, fallback to preview
+da up --format json           # machine-readable ready object with URL and source priority
+da up --fallback none         # local-only mode
+da up --fallback live         # fallback misses to configured live host
+```
+
+Source priority is local code files, then local `content/` workspace files, then configured preview/live fallback. The command does not open a browser by default; start it, parse the URL from JSON when needed, verify with browser tooling, then stop the process.
+
 ### Content CRUD
 
 ```bash

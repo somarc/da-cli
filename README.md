@@ -23,6 +23,9 @@ da config init          # interactive setup, writes .da.json in current director
 
 # 3. List content
 da content list /
+
+# 4. Serve the current repo locally for browser/agent verification
+da up --format json
 ```
 
 ---
@@ -138,6 +141,40 @@ Print the raw Bearer token to stdout — useful for piping to curl or populating
 export TOKEN=$(da auth token)
 curl -H "Authorization: Bearer $TOKEN" https://admin.da.live/list/myorg/myrepo
 ```
+
+---
+
+## Local server
+
+### `da up`
+
+Run an agent-friendly local EDS server for the current repository.
+
+```bash
+da up
+da up --port 3000 --fallback preview
+da up --content content --fallback live
+da up --fallback none --format json
+```
+
+Resolution order:
+1. Local code files from `--root` (default: current directory)
+2. Local DA content workspace from `--content` (default: `content/`, when present)
+3. Remote fallback to the configured EDS preview or live host
+
+The server does not open a browser by default. It prints a readiness object with `status`, `url`, source roots, fallback, and source priority. Use `--format json` when another tool or agent needs to start the server and parse the URL.
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--port <port>` | Port to listen on (default: `3000`) |
+| `--host <host>` | Host to bind (default: `127.0.0.1`) |
+| `--root <dir>` | Code repository root to serve (default: `.`) |
+| `--content <dir>` | Local DA content workspace directory (default: `content`) |
+| `--no-content` | Disable local content workspace lookup |
+| `--fallback <mode>` | Missing-file fallback: `preview`, `live`, or `none` (default: `preview`) |
+| `--branch <branch>` | EDS branch for preview/live fallback |
 
 ---
 
