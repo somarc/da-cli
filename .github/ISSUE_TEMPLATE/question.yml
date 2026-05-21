@@ -1,0 +1,23 @@
+name: Question
+description: Ask how to use da-cli.
+title: "Question: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: Remove tokens, bearer headers, private URLs, and customer data before submitting.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Include sanitized command output, config shape, or docs you already checked.
+    validations:
+      required: false

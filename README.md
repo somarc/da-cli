@@ -2,11 +2,18 @@
 
 CLI for Adobe Edge Delivery Services via the DA Admin API.
 
+[![npm version](https://img.shields.io/npm/v/@somarc/da-cli.svg)](https://www.npmjs.com/package/@somarc/da-cli)
+[![npm downloads](https://img.shields.io/npm/dm/@somarc/da-cli.svg)](https://www.npmjs.com/package/@somarc/da-cli)
+[![CI](https://github.com/somarc/da-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/somarc/da-cli/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/somarc/da-cli.svg)](./LICENSE)
+
 ```
 npm install -g @somarc/da-cli
 ```
 
 Requires Node >= 18 and Python 3 (used by `da auth login` to cache the token). Zero npm runtime dependencies beyond `commander` and `js-yaml`.
+
+Package: [npm](https://www.npmjs.com/package/@somarc/da-cli) · Releases: [GitHub Releases](https://github.com/somarc/da-cli/releases) · Changelog: [CHANGELOG.md](./CHANGELOG.md)
 
 For agent-specific operating guidance, see [AGENTS.md](./AGENTS.md). For the user-facing command reference, keep this README as the source of truth and mirror material changes into AGENTS.md.
 

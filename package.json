@@ -37,6 +37,7 @@
     "src/lib/stardust-skill.js",
     "src/lib/stardust-state.js",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "bin": {
@@ -53,6 +54,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/somarc/da-cli.git"
+  },
+  "homepage": "https://github.com/somarc/da-cli#readme",
+  "bugs": {
+    "url": "https://github.com/somarc/da-cli/issues"
   },
   "keywords": [
     "aem",
