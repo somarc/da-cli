@@ -1,6 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { fragmentDiagnostic, normalizeHtmlPath } from './content.js';
+import {
+  fragmentDiagnostic,
+  isBinaryUpload,
+  mimeTypeForUpload,
+  normalizeHtmlPath,
+} from './content.js';
 
 describe('normalizeHtmlPath', () => {
   test('appends .html when path has no extension and local file is .html', () => {
@@ -73,5 +78,28 @@ describe('fragmentDiagnostic', () => {
     const result = fragmentDiagnostic('<h1>Hello</h1>', '/page.htm');
     assert.ok(result);
     assert.equal(result.missingBody, true);
+  });
+});
+
+describe('upload content type detection', () => {
+  test('treats known media and binary asset extensions as binary uploads', () => {
+    assert.equal(isBinaryUpload('hero.png'), true);
+    assert.equal(isBinaryUpload('clip.MP4'), true);
+    assert.equal(isBinaryUpload('font.woff2'), true);
+    assert.equal(isBinaryUpload('document.pdf'), true);
+  });
+
+  test('uses expected MIME types for binary uploads', () => {
+    assert.equal(mimeTypeForUpload('hero.png'), 'image/png');
+    assert.equal(mimeTypeForUpload('photo.jpeg'), 'image/jpeg');
+    assert.equal(mimeTypeForUpload('clip.mp4'), 'video/mp4');
+    assert.equal(mimeTypeForUpload('font.woff2'), 'font/woff2');
+  });
+
+  test('defaults text-like uploads to text/html', () => {
+    assert.equal(isBinaryUpload('index.html'), false);
+    assert.equal(isBinaryUpload('metadata.json'), false);
+    assert.equal(mimeTypeForUpload('index.html'), 'text/html');
+    assert.equal(mimeTypeForUpload('metadata.json'), 'text/html');
   });
 });

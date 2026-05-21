@@ -214,14 +214,16 @@ da content get /blog/post.html -o post.html
 
 ### `da content put <path> <file>`
 
-Upload a document. Dry-run by default — shows diff before writing.
+Upload a document or binary asset. Dry-run by default — shows diff before writing for text/HTML uploads.
 
 ```bash
 da content put /index.html ./index.html          # dry-run: shows diff
 da content put /index.html ./index.html --commit # writes to DA
+da content put /media/hero.png ./hero.png        # dry-run: binary preflight
 ```
 
 Warns if the HTML lacks a `<main>` wrapper — Helix extracts only content inside `<main>`, so an unwrapped document will render empty.
+Known binary asset extensions such as images, video, audio, PDF, fonts, and zip files are uploaded with their matching MIME type and skip text diff/HTML fragment checks.
 
 ### `da content delete <path>`
 

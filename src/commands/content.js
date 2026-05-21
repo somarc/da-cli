@@ -176,40 +176,53 @@ export function makeContentCommand() {
   // ─── put ───────────────────────────────────────────────────────────────────
   content
     .command('put <path> <file>')
-    .description('Upload a document — dry-run by default, shows diff; pass --commit to write')
+    .description('Upload a document or binary asset — dry-run by default, shows diff for text; pass --commit to write')
     .action(async (path, file) => {
-      const { readFile } = await import('node:fs/promises');
+      const { readFile, stat } = await import('node:fs/promises');
+      const uploadMimeType = mimeTypeForUpload(file);
+      const binaryUpload = isBinaryUpload(file);
+
       let newContent;
       try {
-        newContent = await readFile(file, 'utf8');
+        newContent = binaryUpload ? await readFile(file) : await readFile(file, 'utf8');
       } catch (err) {
         console.error(`Cannot read ${file}: ${err.message}`);
         process.exit(1);
       }
 
-      const normalizedPath = normalizeHtmlPath(path, file);
-      if (normalizedPath !== path) {
-        info(`Note: path normalized to ${normalizedPath} — EDS reads .html; extensionless paths are skipped by the content pipeline`);
-        path = normalizedPath;
-      }
+      if (!binaryUpload) {
+        const normalizedPath = normalizeHtmlPath(path, file);
+        if (normalizedPath !== path) {
+          info(`Note: path normalized to ${normalizedPath} — EDS reads .html; extensionless paths are skipped by the content pipeline`);
+          path = normalizedPath;
+        }
 
-      warnIfFragment(newContent, path);
+        warnIfFragment(newContent, path);
+      }
 
       const client = await createClient();
+      const notes = [];
 
-      // Fetch existing content to show diff before the guard gate
-      let oldContent = null;
-      try {
-        const res = await client.sourceGet(path);
-        oldContent = await res.text();
-      } catch (err) {
-        if (!(err instanceof DaApiError && err.status === 404)) throw err;
+      if (binaryUpload) {
+        const fileSize = (await stat(file)).size;
+        info(`Binary upload: ${path} (${uploadMimeType}, ${(fileSize / 1024).toFixed(1)} KB)`);
+        notes.push('Binary asset upload; text diff and HTML fragment checks are skipped.');
+      } else {
+        // Fetch existing content to show diff before the guard gate
+        let oldContent = null;
+        try {
+          const res = await client.sourceGet(path);
+          oldContent = await res.text();
+        } catch (err) {
+          if (!(err instanceof DaApiError && err.status === 404)) throw err;
+        }
+
+        const diffText = simpleDiff(oldContent ?? '', newContent);
+        info(oldContent === null ? `New document: ${path}` : `Diff for ${path}:`);
+        if (oldContent !== null) info(diffText);
+        if (oldContent === null) notes.push(await newDocumentRouteNote(client, path));
       }
 
-      const diffText = simpleDiff(oldContent ?? '', newContent);
-      info(oldContent === null ? `New document: ${path}` : `Diff for ${path}:`);
-      if (oldContent !== null) info(diffText);
-      const notes = oldContent === null ? [await newDocumentRouteNote(client, path)] : [];
       printWritePreflight({
         client,
         operation: `content put ${path}`,
@@ -223,7 +236,7 @@ export function makeContentCommand() {
       if (!proceed) return;
 
       try {
-        await client.sourcePut(path, newContent);
+        await client.sourcePut(path, newContent, uploadMimeType);
         info(`Uploaded ${path}`);
       } catch (err) {
         handleApiError(err);
@@ -336,6 +349,37 @@ export function fragmentDiagnostic(html, path) {
   if (!/\.html?$/i.test(path)) return null;
   if (/<main[\s>]/i.test(html)) return null;
   return { missingBody: !/<body[\s>]/i.test(html) };
+}
+
+const BINARY_UPLOAD_MIME_TYPES = {
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.ogg': 'audio/ogg',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
+  '.wav': 'audio/wav',
+  '.webm': 'video/webm',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.zip': 'application/zip',
+};
+
+export function mimeTypeForUpload(localFile = '') {
+  const ext = localFile.match(/(\.[^./\\]+)$/)?.[1]?.toLowerCase();
+  return BINARY_UPLOAD_MIME_TYPES[ext] ?? 'text/html';
+}
+
+export function isBinaryUpload(localFile = '') {
+  return mimeTypeForUpload(localFile) !== 'text/html';
 }
 
 // DA stores HTML as-is. Helix extracts only content inside <main>.
