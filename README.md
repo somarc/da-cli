@@ -1,6 +1,6 @@
 # da-cli
 
-CLI for Adobe Edge Delivery Services via the DA Admin API.
+Agentic-first CLI for Adobe Edge Delivery Services via the DA Admin API.
 
 [![npm version](https://img.shields.io/npm/v/@somarc/da-cli.svg)](https://www.npmjs.com/package/@somarc/da-cli)
 [![npm downloads](https://img.shields.io/npm/dm/@somarc/da-cli.svg)](https://www.npmjs.com/package/@somarc/da-cli)
